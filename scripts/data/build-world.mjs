@@ -156,7 +156,7 @@ export async function buildWorld() {
         } else if (ti.kind === 'tunnel') {
           h = Math.max(h, ti.y + 7.5);
         } else {
-          const core = 3.4;
+          const core = 2.7;
           if (ti.d < core) { h = form; c = CLS.BALLAST; }
           else {
             const w = Math.max(2.5, Math.abs(h - form) * 1.6);
@@ -164,7 +164,7 @@ export async function buildWorld() {
               const t = (ti.d - core) / w, sm = t * t * (3 - 2 * t);
               const nh = form + (h - form) * sm;
               if (h < form - 0.3 && h < 1.0 && ti.d < core + 6) c = CLS.ROCK; // sea-wall rock armour
-              else if (ti.d < core + 1.6) c = CLS.BALLAST;
+              else if (ti.d < core + 0.7) c = CLS.BALLAST;
               h = nh;
             }
           }

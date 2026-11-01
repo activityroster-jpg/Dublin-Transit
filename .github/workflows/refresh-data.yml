@@ -1,0 +1,30 @@
+name: Refresh route data
+
+# Rebuilds public/data from OpenStreetMap, the NTA GTFS feed and terrain tiles, and opens a
+# pull request if anything changed. Runs monthly and on demand.
+on:
+  schedule:
+    - cron: '17 4 3 * *'
+  workflow_dispatch:
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run data
+      - uses: peter-evans/create-pull-request@v7
+        with:
+          branch: data/refresh
+          title: 'Refresh route data (OSM, GTFS, terrain)'
+          commit-message: 'Refresh baked route data'
+          body: 'Automated rebuild of `public/data/dart/` from OpenStreetMap, the NTA Irish Rail GTFS feed and AWS Terrain Tiles.'
+          add-paths: public/data

@@ -1,0 +1,246 @@
+// The driving cab: shell, windscreen, desk, instrument panel, seat, and working controls.
+// Convention: positions are given in SCREEN coordinates (sx > 0 = the driver's right). The cab
+// camera looks along the car's +z axis, so screen x maps to world x = -sx. The driver sits on
+// the left, as on Irish stock. Everything clickable carries userData.action; instruments are
+// live canvas textures.
+import * as THREE from 'three';
+import { CAR_LEN } from './model';
+import type { Aspect } from '../render/signals';
+import { NOTCH_MAX, NOTCH_MIN, notchLabel } from './physics';
+
+const ZF = CAR_LEN / 2; // cab front (local z)
+const W = (sx: number) => -sx;
+const DRIVER_SX = -0.56;
+export const EYE = new THREE.Vector3(W(DRIVER_SX), 2.5, ZF - 1.25);
+
+function mat(color: number, rough = 0.6, metal = 0.1, extra: Partial<THREE.MeshStandardMaterialParameters> = {}) { return new THREE.MeshStandardMaterial({ color, roughness: rough, metalness: metal, ...extra }); }
+const box = new THREE.BoxGeometry(1, 1, 1);
+
+export interface CabState {
+  kmh: number; limitKmh: number; nextLimitKmh: number | null; notch: number; aspect: Aspect; warning: boolean; interlock: boolean;
+  doorsLeft: number; doorsRight: number; headlights: boolean; pantograph: boolean; ebActive: boolean; ataTarget: number | null;
+  screen: { clock: string; next: string; nextArr: string; dist: string; delta: string; msg: string };
+}
+
+export class Cab {
+  readonly group = new THREE.Group();
+  readonly clickables: THREE.Object3D[] = [];
+  private lever: THREE.Group;
+  private speedoCanvas = document.createElement('canvas');
+  private speedoTex: THREE.CanvasTexture;
+  private screenCanvas = document.createElement('canvas');
+  private screenTex: THREE.CanvasTexture;
+  private lamps: Record<string, THREE.MeshStandardMaterial> = {};
+  private lastSpeedo = '';
+  private lastScreen = '';
+  readonly light: THREE.PointLight;
+  private wiper: THREE.Mesh;
+  wiperOn = false;
+  private wiperT = 0;
+
+  constructor() {
+    const g = this.group;
+    const shell = mat(0x9ea3a3, 0.7);
+    const darkPanel = mat(0x2b2f31, 0.55, 0.2);
+    const desk = mat(0x3a3f42, 0.5, 0.2);
+    const floor = mat(0x2a2a2a, 0.9);
+    const glass = new THREE.MeshPhysicalMaterial({ color: 0xffffff, roughness: 0.02, metalness: 0, transmission: 0, transparent: true, opacity: 0.08, side: THREE.DoubleSide, depthWrite: false });
+    /** Box at screen-x sx. */
+    const P = (m: THREE.Material, sx_: number, sy: number, sz: number, sx: number, y: number, z: number, shadow = true) => {
+      const o = new THREE.Mesh(box, m); o.scale.set(sx_, sy, sz); o.position.set(W(sx), y, z); o.castShadow = shadow; o.receiveShadow = true; g.add(o); return o;
+    };
+    const SILL = 2.3, TOP = 3.25;
+    // shell
+    P(floor, 2.76, 0.04, 2.4, 0, 1.1, ZF - 1.2);
+    P(shell, 2.76, 0.06, 2.4, 0, 3.56, ZF - 1.2);              // ceiling
+    P(shell, 2.76, 2.5, 0.06, 0, 2.35, ZF - 2.4);              // back wall
+    for (const sx of [-1, 1]) {
+      P(shell, 0.06, 1.2, 2.4, sx * 1.38, 1.7, ZF - 1.2);       // lower side
+      P(shell, 0.06, 0.35, 2.4, sx * 1.38, 3.38, ZF - 1.2);     // upper side
+      P(shell, 0.06, 0.9, 0.9, sx * 1.38, 2.75, ZF - 2.0);      // rear of side window
+      P(shell, 0.08, TOP - SILL, 0.12, sx * 1.33, (SILL + TOP) / 2, ZF - 0.12);   // A pillar
+      const sw = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 0.9), glass); sw.position.set(W(sx * 1.385), 2.75, ZF - 0.85); sw.rotation.y = Math.PI / 2; g.add(sw);
+    }
+    P(shell, 2.76, 3.56 - TOP, 0.08, 0, (3.56 + TOP) / 2, ZF - 0.08);   // header above windscreen
+    P(darkPanel, 2.76, SILL - 1.1, 0.08, 0, (SILL + 1.1) / 2, ZF - 0.06); // front wall below the windscreen
+    P(shell, 0.1, TOP - SILL, 0.1, 0.3, (SILL + TOP) / 2, ZF - 0.08);    // centre pillar (two-piece screen)
+    const ws = new THREE.Mesh(new THREE.PlaneGeometry(2.7, TOP - SILL), glass); ws.position.set(0, (SILL + TOP) / 2, ZF - 0.05); g.add(ws);
+    // sun visor above the driver
+    const visor = P(new THREE.MeshStandardMaterial({ color: 0x223022, transparent: true, opacity: 0.55, roughness: 0.3 }), 1.0, 0.01, 0.35, DRIVER_SX, 3.2, ZF - 0.3, false); visor.rotation.x = 0.35;
+    // desk: flat top at the hands, then the instrument panel angled up to the windscreen sill
+    P(desk, 2.7, 0.05, 0.6, 0, 1.98, ZF - 0.75);
+    P(darkPanel, 2.7, 0.88, 0.05, 0, 1.54, ZF - 1.05);
+    P(darkPanel, 2.7, 0.3, 0.6, 0, 2.1, ZF - 0.3);              // body behind the angled panel
+    P(desk, 2.7, 0.02, 0.12, 0, SILL - 0.02, ZF - 0.1);          // ledge under the sill
+    // wiper (pivot at the bottom of the screen)
+    this.wiper = P(mat(0x111111), 0.03, 0.85, 0.02, DRIVER_SX, SILL, ZF + 0.0, false);
+    this.wiper.geometry = new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0);
+    // seat
+    P(mat(0x23272a, 0.9), 0.55, 0.12, 0.5, DRIVER_SX, 1.6, EYE.z + 0.2);
+    P(mat(0x23272a, 0.9), 0.55, 0.75, 0.1, DRIVER_SX, 2.02, EYE.z + 0.5).rotation.x = -0.15;
+    P(mat(0x444444, 0.5, 0.6), 0.08, 0.45, 0.08, DRIVER_SX, 1.3, EYE.z + 0.2);
+
+    // Instrument panel: 45° face from (y 1.98, z ZF-0.45) up to (y 2.28, z ZF-0.15), facing the driver.
+    // rotation (0.78, π, 0): local +x = screen x, local +y = up/away, normal = up/towards the driver.
+    const panel = new THREE.Group();
+    panel.position.set(0, 2.13, ZF - 0.3);
+    panel.rotation.set(0.78, Math.PI, 0);
+    g.add(panel);
+    const face = new THREE.Mesh(new THREE.PlaneGeometry(2.7, 0.42), desk); face.position.z = -0.001; panel.add(face);
+    // speedometer in front of the driver
+    this.speedoCanvas.width = this.speedoCanvas.height = 256;
+    this.speedoTex = new THREE.CanvasTexture(this.speedoCanvas); this.speedoTex.colorSpace = THREE.SRGBColorSpace;
+    const speedo = new THREE.Mesh(new THREE.CircleGeometry(0.11, 40), new THREE.MeshStandardMaterial({ map: this.speedoTex, emissive: 0xffffff, emissiveMap: this.speedoTex, emissiveIntensity: 0.35, roughness: 0.3 }));
+    speedo.position.set(DRIVER_SX, 0.02, 0.004); panel.add(speedo);
+    const bezel = new THREE.Mesh(new THREE.RingGeometry(0.11, 0.125, 40), mat(0x111111, 0.4, 0.5)); bezel.position.set(DRIVER_SX, 0.02, 0.005); panel.add(bezel);
+    // CAWS aspect display (4 lamps, top to bottom: YY, G, Y, R) to the left of the speedo
+    const cawsX = DRIVER_SX - 0.3;
+    const cawsBox = new THREE.Mesh(new THREE.PlaneGeometry(0.075, 0.26), mat(0x0a0a0a)); cawsBox.position.set(cawsX, 0.03, 0.002); panel.add(cawsBox);
+    const lampDefs: [string, number, number][] = [['Y2', 0x332200, 0.12], ['G', 0x003311, 0.06], ['Y', 0x332200, 0.0], ['R', 0x330000, -0.06]];
+    const lampCols: Record<string, number> = { Y2: 0xffb000, G: 0x22ff77, Y: 0xffb000, R: 0xff2200 };
+    for (const [k, c, y] of lampDefs) {
+      const m = new THREE.MeshStandardMaterial({ color: c, emissive: new THREE.Color(lampCols[k]), emissiveIntensity: 0 });
+      this.lamps['caws' + k] = m;
+      const l = new THREE.Mesh(new THREE.CircleGeometry(0.02, 20), m); l.position.set(cawsX, y, 0.004); panel.add(l);
+    }
+    const ct = labelMesh('CAWS', 0.08); ct.position.set(cawsX, -0.11, 0.004); panel.add(ct);
+    // train management screen to the right of the speedo
+    this.screenCanvas.width = 512; this.screenCanvas.height = 300;
+    this.screenTex = new THREE.CanvasTexture(this.screenCanvas); this.screenTex.colorSpace = THREE.SRGBColorSpace;
+    const scr = new THREE.Mesh(new THREE.PlaneGeometry(0.34, 0.2), new THREE.MeshStandardMaterial({ map: this.screenTex, emissive: 0xffffff, emissiveMap: this.screenTex, emissiveIntensity: 0.6, roughness: 0.2 }));
+    scr.position.set(DRIVER_SX + 0.42, 0.02, 0.004); panel.add(scr);
+    const scrFrame = new THREE.Mesh(new THREE.PlaneGeometry(0.37, 0.23), mat(0x101214)); scrFrame.position.set(DRIVER_SX + 0.42, 0.02, 0.003); panel.add(scrFrame);
+    // indicator lamps and buttons along the right half of the panel
+    const indicator = (key: string, col: number, x: number, y: number, label: string) => {
+      const m = new THREE.MeshStandardMaterial({ color: 0x111111, emissive: new THREE.Color(col), emissiveIntensity: 0 });
+      this.lamps[key] = m;
+      const l = new THREE.Mesh(new THREE.CircleGeometry(0.014, 16), m); l.position.set(x, y, 0.004); panel.add(l);
+      const t = labelMesh(label, 0.09); t.position.set(x, y - 0.03, 0.004); panel.add(t);
+    };
+    indicator('interlock', 0x22ff55, 0.2, 0.14, 'DOORS CLOSED');
+    indicator('doorsL', 0xffaa00, 0.1, 0.05, 'L OPEN');
+    indicator('doorsR', 0xffaa00, 0.3, 0.05, 'R OPEN');
+    indicator('pan', 0x44aaff, 0.5, 0.14, 'PAN UP');
+    indicator('eb', 0xff2200, 0.7, 0.14, 'EMERG BRAKE');
+    indicator('head', 0xffffff, 0.9, 0.14, 'HEADLIGHTS');
+    const button = (action: string, col: number, x: number, y: number, r: number, label: string) => {
+      const m = new THREE.MeshStandardMaterial({ color: col, roughness: 0.4, emissive: new THREE.Color(col), emissiveIntensity: 0.05 });
+      const b = new THREE.Mesh(new THREE.CylinderGeometry(r, r, 0.02, 20), m);
+      b.rotation.x = Math.PI / 2; b.position.set(x, y, 0.012);
+      b.userData.action = action; b.userData.label = label;
+      panel.add(b); this.clickables.push(b);
+      const t = labelMesh(label, 0.09); t.position.set(x, y - r - 0.02, 0.004); panel.add(t);
+      return b;
+    };
+    button('ack', 0xf5c400, DRIVER_SX - 0.3, -0.09, 0.03, 'CAWS ACK');
+    button('horn', 0x333333, DRIVER_SX + 0.16, -0.1, 0.022, 'HORN');
+    button('eb', 0xcc1100, 0.5, -0.06, 0.035, 'EMERGENCY');
+    button('panUp', 0x2255aa, 0.68, -0.04, 0.016, 'PAN ↑');
+    button('panDown', 0x223355, 0.78, -0.04, 0.016, 'PAN ↓');
+    button('lights', 0xdddddd, 0.9, -0.04, 0.016, 'LIGHTS');
+    button('wiper', 0x555555, 1.0, -0.04, 0.016, 'WIPER');
+    // door controls on each side wall by the driver (left wall for the left doors, right wall for the right)
+    const doorPanel = (sx: number) => {
+      const dp = new THREE.Group();
+      dp.position.set(W(sx * 1.34), 2.1, ZF - 1.1);
+      dp.rotation.y = sx < 0 ? -Math.PI / 2 : Math.PI / 2;
+      g.add(dp);
+      const plate = new THREE.Mesh(new THREE.PlaneGeometry(0.3, 0.22), mat(0x1a1d1f)); dp.add(plate);
+      const mk = (action: string, col: number, x: number, label: string) => {
+        const b = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.02, 20), new THREE.MeshStandardMaterial({ color: col, emissive: new THREE.Color(col), emissiveIntensity: 0.08 }));
+        b.rotation.x = Math.PI / 2; b.position.set(x, 0.02, 0.012); b.userData.action = action; b.userData.label = label;
+        dp.add(b); this.clickables.push(b);
+        const t = labelMesh(label, 0.09); t.position.set(x, -0.04, 0.003); dp.add(t);
+      };
+      const s = sx < 0 ? 'L' : 'R';
+      mk(`open${s}`, 0x22aa44, -0.07, `OPEN ${s}`);
+      mk(`close${s}`, 0xcc2222, 0.07, `CLOSE ${s}`);
+      const t = labelMesh(sx < 0 ? 'LEFT DOORS' : 'RIGHT DOORS', 0.18); t.position.set(0, 0.085, 0.003); dp.add(t);
+    };
+    doorPanel(-1); doorPanel(1);
+    // master controller: combined traction/brake handle at the driver's left hand
+    this.lever = new THREE.Group();
+    this.lever.position.set(W(DRIVER_SX - 0.42), 2.0, ZF - 0.8);
+    g.add(this.lever);
+    const quad = new THREE.Mesh(box, darkPanel); quad.scale.set(0.12, 0.05, 0.36); quad.position.copy(this.lever.position); g.add(quad);
+    const shaft = new THREE.Mesh(box, mat(0x777777, 0.3, 0.8)); shaft.scale.set(0.025, 0.2, 0.025); shaft.position.y = 0.1; this.lever.add(shaft);
+    const knob = new THREE.Mesh(new THREE.SphereGeometry(0.035, 16, 12), mat(0x111111, 0.4)); knob.position.y = 0.21; this.lever.add(knob);
+    knob.userData.action = 'lever'; shaft.userData.action = 'lever';
+    this.clickables.push(knob, shaft);
+    const nl = labelMesh('POWER ↑  ·  BRAKE ↓', 0.24); nl.position.set(W(DRIVER_SX - 0.42), 2.01, ZF - 0.55); nl.rotation.set(-Math.PI / 2, 0, Math.PI); g.add(nl);
+
+    this.light = new THREE.PointLight(0xffe2b8, 0, 4, 1.5);
+    this.light.position.set(0, 3.4, ZF - 1.2);
+    g.add(this.light);
+    this.drawSpeedo(0, 0, null, 0);
+  }
+
+  update(dt: number, st: CabState, night: number) {
+    // lever: pushed forward for power, pulled back for brake
+    const ang = (st.notch / Math.max(NOTCH_MAX, -NOTCH_MIN)) * 0.75;
+    this.lever.rotation.x += (ang - this.lever.rotation.x) * Math.min(1, dt * 12);
+    const sp = `${Math.round(st.kmh * 2)}|${st.limitKmh}|${st.nextLimitKmh}|${st.notch}`;
+    if (sp !== this.lastSpeedo) { this.lastSpeedo = sp; this.drawSpeedo(st.kmh, st.limitKmh, st.nextLimitKmh, st.notch); }
+    const on = (k: string, v: boolean, i = 2.5) => { this.lamps[k].emissiveIntensity = v ? i : 0; this.lamps[k].color.setHex(v ? 0xffffff : 0x111111); };
+    const blink = st.warning && Math.floor(performance.now() / 300) % 2 === 0;
+    on('cawsG', st.aspect === 'G'); on('cawsY', (st.aspect === 'Y' || st.aspect === 'YY') && !blink); on('cawsY2', st.aspect === 'YY' && !blink); on('cawsR', st.aspect === 'R' && !blink);
+    on('interlock', st.interlock); on('doorsL', st.doorsLeft > 0.01); on('doorsR', st.doorsRight > 0.01);
+    on('pan', st.pantograph, 1.5); on('eb', st.ebActive); on('head', st.headlights, 1.2);
+    const sc = JSON.stringify(st.screen);
+    if (sc !== this.lastScreen) { this.lastScreen = sc; this.drawScreen(st); }
+    this.light.intensity = night * 0.6;
+    if (this.wiperOn || this.wiperT > 0) {
+      this.wiperT += dt * 1.6;
+      this.wiper.rotation.z = Math.sin(this.wiperT * Math.PI) * 1.1;
+      if (!this.wiperOn && Math.abs(Math.sin(this.wiperT * Math.PI)) < 0.03) { this.wiperT = 0; this.wiper.rotation.z = 0; }
+    }
+  }
+
+  private drawSpeedo(kmh: number, limit: number, next: number | null, notch: number) {
+    const c = this.speedoCanvas.getContext('2d')!;
+    const W2 = 256, cx = 128, cy = 128, R = 118;
+    c.fillStyle = '#0b0d0e'; c.fillRect(0, 0, W2, W2);
+    const a0 = Math.PI * 0.75, a1 = Math.PI * 2.25, max = 120;
+    const ang = (v: number) => a0 + (a1 - a0) * Math.min(1, v / max);
+    c.lineWidth = 10; c.strokeStyle = '#d33'; c.beginPath(); c.arc(cx, cy, R - 10, ang(limit), ang(max)); c.stroke();
+    c.strokeStyle = '#2a6'; c.beginPath(); c.arc(cx, cy, R - 10, a0, ang(limit)); c.stroke();
+    c.strokeStyle = '#ddd'; c.fillStyle = '#ddd'; c.lineWidth = 2; c.font = 'bold 15px Arial'; c.textAlign = 'center'; c.textBaseline = 'middle';
+    for (let v = 0; v <= max; v += 10) {
+      const a = ang(v), big = v % 20 === 0;
+      c.beginPath(); c.moveTo(cx + Math.cos(a) * (R - 18), cy + Math.sin(a) * (R - 18)); c.lineTo(cx + Math.cos(a) * (R - (big ? 32 : 26)), cy + Math.sin(a) * (R - (big ? 32 : 26))); c.stroke();
+      if (big) c.fillText(String(v), cx + Math.cos(a) * (R - 46), cy + Math.sin(a) * (R - 46));
+    }
+    c.font = 'bold 30px Arial'; c.fillStyle = '#fff'; c.fillText(String(Math.round(kmh)), cx, cy + 40);
+    c.font = '12px Arial'; c.fillStyle = '#aaa'; c.fillText('km/h', cx, cy + 62);
+    c.fillStyle = '#f5c400'; c.font = 'bold 14px Arial'; c.fillText(notchLabel(notch), cx, cy - 40);
+    if (next != null) { c.fillStyle = '#8cf'; c.font = '12px Arial'; c.fillText(`next ${next}`, cx, cy + 80); }
+    const a = ang(kmh);
+    c.strokeStyle = '#ff6a00'; c.lineWidth = 4; c.beginPath(); c.moveTo(cx - Math.cos(a) * 12, cy - Math.sin(a) * 12); c.lineTo(cx + Math.cos(a) * (R - 22), cy + Math.sin(a) * (R - 22)); c.stroke();
+    c.fillStyle = '#333'; c.beginPath(); c.arc(cx, cy, 9, 0, Math.PI * 2); c.fill();
+    this.speedoTex.needsUpdate = true;
+  }
+
+  private drawScreen(st: CabState) {
+    const c = this.screenCanvas.getContext('2d')!;
+    c.fillStyle = '#05131c'; c.fillRect(0, 0, 512, 300);
+    c.fillStyle = '#0e3a52'; c.fillRect(0, 0, 512, 44);
+    c.fillStyle = '#fff'; c.font = 'bold 26px Arial'; c.textAlign = 'left'; c.fillText('DART', 14, 31);
+    c.textAlign = 'right'; c.fillText(st.screen.clock, 498, 31);
+    c.textAlign = 'left'; c.fillStyle = '#9fd3ff'; c.font = '20px Arial'; c.fillText('Next stop', 14, 80);
+    c.fillStyle = '#fff'; c.font = 'bold 30px Arial'; c.fillText(st.screen.next.slice(0, 26), 14, 116);
+    c.font = '22px Arial'; c.fillStyle = '#ddd';
+    c.fillText(`Due ${st.screen.nextArr}`, 14, 156); c.fillText(st.screen.dist, 260, 156);
+    c.fillStyle = /late/.test(st.screen.delta) ? '#ff8a65' : '#9be89b'; c.font = 'bold 24px Arial';
+    c.fillText(st.screen.delta, 14, 196);
+    c.fillStyle = '#f5c400'; c.font = '20px Arial'; c.fillText(st.screen.msg.slice(0, 40), 14, 250);
+    this.screenTex.needsUpdate = true;
+  }
+}
+
+function labelMesh(text: string, width: number): THREE.Mesh {
+  const cv = document.createElement('canvas'); cv.width = 256; cv.height = 48;
+  const g = cv.getContext('2d')!;
+  g.fillStyle = '#cfd4d6'; g.font = 'bold 26px Arial'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(text, 128, 26);
+  const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace;
+  return new THREE.Mesh(new THREE.PlaneGeometry(width, (width * 48) / 256), new THREE.MeshBasicMaterial({ map: t, transparent: true, depthWrite: false, toneMapped: false }));
+}

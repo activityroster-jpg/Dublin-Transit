@@ -1,0 +1,283 @@
+// Track (rails, sleepers, ballast), structures (viaducts, bridges, tunnels) and overhead line
+// equipment, generated along the real track geometry in chunks.
+import * as THREE from 'three';
+import type { TrackPath } from '../dart/path';
+import { tex } from './textures';
+
+export const CHUNK = 200;
+const GAUGE_HALF = 0.8 + 0.036; // Irish gauge 1600 mm, measured to rail centres
+const RAIL_H = 0.16;
+const SLEEPER_SPACING = 0.65;
+export const WIRE_HEIGHT = 4.9;
+
+export interface TrackMaterials {
+  railTop: THREE.Material; railSide: THREE.Material; sleeper: THREE.Material; ballast: THREE.Material;
+  masonry: THREE.Material; steel: THREE.Material; mast: THREE.Material; wire: THREE.Material; tunnel: THREE.Material; concrete: THREE.Material;
+}
+
+export function makeTrackMaterials(): TrackMaterials {
+  const ballastMap = tex('ballast_diff', 1);
+  const ballastNor = tex('ballast_nor_gl', 1, false);
+  return {
+    railTop: new THREE.MeshStandardMaterial({ color: 0xd8dde2, metalness: 1, roughness: 0.22 }),
+    railSide: new THREE.MeshStandardMaterial({ color: 0x5a3a26, metalness: 0.5, roughness: 0.8, map: tex('rustmetal_diff', 1) }),
+    sleeper: new THREE.MeshStandardMaterial({ color: 0xa8a49c, roughness: 0.9, map: tex('concrete_diff', 1), normalMap: tex('concrete_nor_gl', 1, false) }),
+    ballast: new THREE.MeshStandardMaterial({ color: 0x8f8a84, roughness: 1, map: ballastMap, normalMap: ballastNor, normalScale: new THREE.Vector2(1.4, 1.4) }),
+    masonry: new THREE.MeshStandardMaterial({ side: THREE.DoubleSide, color: 0xb0a596, roughness: 0.95, map: tex('stonewall_diff', 1), normalMap: tex('stonewall_nor_gl', 1, false) }),
+    steel: new THREE.MeshStandardMaterial({ side: THREE.DoubleSide, color: 0x3f5560, roughness: 0.6, metalness: 0.6 }),
+    mast: new THREE.MeshStandardMaterial({ color: 0x8c9296, roughness: 0.55, metalness: 0.7 }),
+    wire: new THREE.MeshStandardMaterial({ color: 0x5a4632, roughness: 0.5, metalness: 0.8 }),
+    tunnel: new THREE.MeshStandardMaterial({ color: 0x5b5249, roughness: 1, map: tex('stonewall_diff', 1), normalMap: tex('stonewall_nor_gl', 1, false), side: THREE.DoubleSide }),
+    concrete: new THREE.MeshStandardMaterial({ color: 0xb4b0a8, roughness: 0.9, map: tex('concrete_diff', 1), normalMap: tex('concrete_nor_gl', 1, false) }),
+  };
+}
+
+/** Sweeps a 2-D profile (lateral, vertical) along the path between s0 and s1. */
+function sweep(path: TrackPath, s0: number, s1: number, step: number, profile: [number, number][], origin: THREE.Vector3, uScale = 1, closed = false, vScaleByLen = true): THREE.BufferGeometry {
+  const n = Math.max(2, Math.ceil((s1 - s0) / step) + 1);
+  const m = profile.length;
+  const pos = new Float32Array(n * m * 3), uv = new Float32Array(n * m * 2);
+  const p = new THREE.Vector3(), r = new THREE.Vector3();
+  // cumulative profile length for v
+  const pl = [0];
+  for (let k = 1; k < m; k++) pl.push(pl[k - 1] + Math.hypot(profile[k][0] - profile[k - 1][0], profile[k][1] - profile[k - 1][1]));
+  for (let i = 0; i < n; i++) {
+    const s = Math.min(s1, s0 + ((s1 - s0) * i) / (n - 1));
+    path.point(s, p); path.right(s, r);
+    for (let k = 0; k < m; k++) {
+      const [lx, ly] = profile[k];
+      const o = (i * m + k) * 3;
+      pos[o] = p.x + r.x * lx - origin.x; pos[o + 1] = p.y + ly - origin.y; pos[o + 2] = p.z + r.z * lx - origin.z;
+      uv[(i * m + k) * 2] = vScaleByLen ? pl[k] * uScale : k / (m - 1);
+      uv[(i * m + k) * 2 + 1] = s * uScale;
+    }
+  }
+  const idx: number[] = [];
+  const segs = closed ? m : m - 1;
+  for (let i = 0; i < n - 1; i++) for (let k = 0; k < segs; k++) {
+    const k2 = (k + 1) % m;
+    const a = i * m + k, b = i * m + k2, c = (i + 1) * m + k, d = (i + 1) * m + k2;
+    idx.push(a, b, c, b, d, c);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  g.setIndex(idx);
+  g.computeVertexNormals();
+  return g;
+}
+
+const unitBox = new THREE.BoxGeometry(1, 1, 1);
+const sleeperGeo = new THREE.BoxGeometry(2.6, 0.2, 0.26);
+sleeperGeo.translate(0, -RAIL_H - 0.1, 0);
+const clipGeo = new THREE.BoxGeometry(0.16, 0.05, 0.1);
+
+/** Ranges [s0,s1] within this chunk where this path owns the physical track. */
+function ownedRanges(path: TrackPath, owner: Uint8Array, s0: number, s1: number): [number, number][] {
+  const out: [number, number][] = [];
+  let start: number | null = null;
+  const i0 = Math.floor(s0 / path.step), i1 = Math.min(path.n - 1, Math.ceil(s1 / path.step));
+  for (let i = i0; i <= i1; i++) {
+    const own = owner[i] === 1;
+    if (own && start == null) start = i * path.step;
+    if ((!own || i === i1) && start != null) { const e = own ? i * path.step : (i - 1) * path.step; if (e - start > 1) out.push([Math.max(s0, start), Math.min(s1, e + (own ? 0 : path.step * 0.5))]); start = null; }
+  }
+  return out;
+}
+
+export function buildTrackChunk(path: TrackPath, owner: Uint8Array, ci: number, M: TrackMaterials, detail: number): THREE.Group | null {
+  const s0 = ci * CHUNK, s1 = Math.min(path.length, (ci + 1) * CHUNK);
+  if (s1 - s0 < 1) return null;
+  const ranges = ownedRanges(path, owner, s0, s1);
+  if (!ranges.length) return null;
+  const g = new THREE.Group();
+  const origin = path.point((s0 + s1) / 2);
+  g.position.copy(origin);
+  const p = new THREE.Vector3(), r = new THREE.Vector3(), t = new THREE.Vector3();
+  const mat4 = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3();
+
+  for (const [a, b] of ranges) {
+    const st = path.structure((a + b) / 2);
+    const onDeck = st && (st[2] === 'viaduct' || st[2] === 'bridge');
+    // Rails: head (bright running surface) + web/foot (rusty)
+    for (const side of [-1, 1]) {
+      const c = side * GAUGE_HALF;
+      g.add(new THREE.Mesh(sweep(path, a, b, 2.5, [[c - 0.036, -0.012], [c - 0.036, 0], [c + 0.036, 0], [c + 0.036, -0.012]], origin, 1, false), M.railTop));
+      g.add(new THREE.Mesh(sweep(path, a, b, 2.5, [[c + 0.036, -0.012], [c + 0.036, -0.045], [c + 0.01, -0.05], [c + 0.009, -0.135], [c + 0.075, -0.15], [c + 0.075, -RAIL_H], [c - 0.075, -RAIL_H], [c - 0.075, -0.15], [c - 0.009, -0.135], [c - 0.01, -0.05], [c - 0.036, -0.045], [c - 0.036, -0.012]], origin, 1, false), M.railSide));
+    }
+    // Ballast bed
+    const ballastProfile: [number, number][] = onDeck
+      ? [[-1.8, -0.3], [1.8, -0.3]]
+      : [[-2.75, -0.8], [-1.7, -0.26], [-1.3, -0.2], [1.3, -0.2], [1.7, -0.26], [2.75, -0.8]];
+    const bg = sweep(path, a, b, 4, ballastProfile, origin, 0.5, false);
+    const bm = new THREE.Mesh(bg, M.ballast); bm.receiveShadow = true; g.add(bm);
+    // Sleepers + clips (instanced)
+    const count = Math.floor((b - a) / SLEEPER_SPACING);
+    const sl = new THREE.InstancedMesh(sleeperGeo, M.sleeper, count);
+    const clips = detail > 0 ? new THREE.InstancedMesh(clipGeo, M.steel, count * 4) : null;
+    let ci2 = 0;
+    for (let k = 0; k < count; k++) {
+      const s = a + (k + 0.5) * SLEEPER_SPACING;
+      path.point(s, p); path.tangent(s, t);
+      q.setFromUnitVectors(new THREE.Vector3(0, 0, 1), new THREE.Vector3(t.x, 0, t.z).normalize());
+      mat4.compose(p.sub(origin), q, sc.set(1, 1, 1));
+      sl.setMatrixAt(k, mat4);
+      if (clips) {
+        path.right(s, r);
+        for (const off of [-GAUGE_HALF - 0.1, -GAUGE_HALF + 0.1, GAUGE_HALF - 0.1, GAUGE_HALF + 0.1]) {
+          path.point(s, p).addScaledVector(r, off).sub(origin); p.y -= RAIL_H - 0.02;
+          mat4.compose(p, q, sc.set(1, 1, 1));
+          clips.setMatrixAt(ci2++, mat4);
+        }
+      }
+    }
+    sl.receiveShadow = true;
+    g.add(sl);
+    if (clips) g.add(clips);
+
+    // Structures
+    if (st) {
+      const [ss0, ss1, kind] = st;
+      const x0 = Math.max(a, ss0), x1 = Math.min(b, ss1);
+      if (x1 - x0 > 1) {
+        if (kind === 'viaduct' || kind === 'bridge') {
+          const deck = sweep(path, x0, x1, 4, [[2.6, -0.3], [2.6, -1.4], [-2.6, -1.4], [-2.6, -0.3]], origin, 0.25, false);
+          g.add(new THREE.Mesh(deck, kind === 'viaduct' ? M.masonry : M.steel));
+          for (const side of [-1, 1]) {
+            const wall = sweep(path, x0, x1, 4, [[side * 2.6, -1.4], [side * 2.6, 1.0], [side * 2.9, 1.0], [side * 2.9, -1.4]], origin, 0.25, false);
+            const wm = new THREE.Mesh(wall, kind === 'viaduct' ? M.masonry : M.steel); wm.castShadow = true; g.add(wm);
+          }
+          // skirt walls from the deck down to the ground (arched viaducts read as a continuous wall)
+          if (kind === 'viaduct') {
+            for (const side of [-1, 1]) {
+              const n = Math.max(2, Math.ceil((x1 - x0) / 4) + 1);
+              const pos = new Float32Array(n * 2 * 3), uv = new Float32Array(n * 2 * 2), idx: number[] = [];
+              for (let i = 0; i < n; i++) {
+                const s = x0 + ((x1 - x0) * i) / (n - 1);
+                path.offsetPoint(s, side * 2.6, -1.4, p);
+                const ground = (path.data.ground[Math.round(s / path.step)] ?? p.y - 8) - 1.5;
+                pos.set([p.x - origin.x, p.y - origin.y, p.z - origin.z, p.x - origin.x, ground - origin.y, p.z - origin.z], i * 6);
+                uv.set([s * 0.25, p.y * 0.25, s * 0.25, ground * 0.25], i * 4);
+                if (i) { const a = (i - 1) * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
+              }
+              const sg = new THREE.BufferGeometry();
+              sg.setAttribute('position', new THREE.BufferAttribute(pos, 3)); sg.setAttribute('uv', new THREE.BufferAttribute(uv, 2)); sg.setIndex(idx); sg.computeVertexNormals();
+              const sm = new THREE.Mesh(sg, M.masonry); sm.castShadow = true; g.add(sm);
+            }
+          }
+        } else if (kind === 'tunnel' && ss1 - ss0 > 40) {
+          // Horseshoe-profile tube, wide enough for double track
+          const prof: [number, number][] = [];
+          for (let k = 0; k <= 16; k++) { const ang = Math.PI * (k / 16); prof.push([Math.cos(ang) * 4.4 + 0, Math.sin(ang) * 4.2 + 2.0]); }
+          prof.unshift([4.4, -0.8]); prof.push([-4.4, -0.8]);
+          const tube = new THREE.Mesh(sweep(path, x0, x1, 3, prof, origin, 0.3, false), M.tunnel);
+          g.add(tube);
+          // Portals
+          for (const ps of [ss0, ss1]) {
+            if (ps < a - 0.1 || ps > b + 0.1) continue;
+            path.point(ps, p); path.tangent(ps, t);
+            const shape = new THREE.Shape();
+            shape.moveTo(-9, -1); shape.lineTo(9, -1); shape.lineTo(9, 10); shape.lineTo(-9, 10); shape.lineTo(-9, -1);
+            const hole = new THREE.Path();
+            hole.moveTo(-4.4, -0.8);
+            hole.lineTo(-4.4, 2.0);
+            hole.absarc(0, 2.0, 4.4, Math.PI, 0, true);
+            hole.lineTo(4.4, -0.8);
+            hole.lineTo(-4.4, -0.8);
+            shape.holes.push(hole);
+            const pg = new THREE.ExtrudeGeometry(shape, { depth: 1.2, bevelEnabled: false });
+            pg.translate(0, 0, -0.6);
+            const pm = new THREE.Mesh(pg, M.masonry);
+            pm.position.set(p.x - origin.x, p.y - origin.y, p.z - origin.z);
+            pm.rotation.y = Math.atan2(t.x, t.z);
+            pm.castShadow = true;
+            g.add(pm);
+          }
+        }
+      }
+    }
+  }
+  g.traverse((o) => { o.matrixAutoUpdate = false; o.updateMatrix(); });
+  g.updateMatrix();
+  return g;
+}
+
+/** Overhead line: masts, cantilevers, contact + catenary wires, droppers. */
+export function buildOleChunk(path: TrackPath, owner: Uint8Array, ci: number, M: TrackMaterials): THREE.Group | null {
+  const s0 = ci * CHUNK, s1 = Math.min(path.length, (ci + 1) * CHUNK);
+  const ranges = ownedRanges(path, owner, s0, s1);
+  if (!ranges.length) return null;
+  const g = new THREE.Group();
+  const origin = path.point((s0 + s1) / 2);
+  g.position.copy(origin);
+  const SPAN = 50;
+  const p = new THREE.Vector3(), r = new THREE.Vector3(), t = new THREE.Vector3();
+  const wires: THREE.Matrix4[] = [];
+  const masts: THREE.Matrix4[] = [], arms: THREE.Matrix4[] = [];
+  const up = new THREE.Vector3(0, 1, 0);
+  const segment = (a: THREE.Vector3, b: THREE.Vector3, thick: number, list: THREE.Matrix4[]) => {
+    const d = new THREE.Vector3().subVectors(b, a); const L = d.length();
+    if (L < 0.01) return;
+    const qq = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), d.normalize());
+    list.push(new THREE.Matrix4().compose(a.clone().add(b).multiplyScalar(0.5), qq, new THREE.Vector3(thick, thick, L)));
+  };
+  const local = (s: number, lat: number, h: number) => path.offsetPoint(s, lat, h).sub(origin);
+  for (const [a, b] of ranges) {
+    const first = Math.ceil(a / SPAN) * SPAN;
+    for (let s = first; s <= b; s += SPAN) {
+      const inTun = path.inTunnel(s);
+      const k = Math.round(s / SPAN);
+      const stagger = (k % 2 ? 1 : -1) * 0.2;
+      const sN = s + SPAN;
+      const staggerN = -stagger;
+      const pyNow = path.point(s, p).y;
+      // mast + cantilever
+      if (!inTun) {
+        path.point(s, p); path.right(s, r); path.tangent(s, t);
+        const base = local(s, -3.3, -0.8);
+        const yaw = Math.atan2(t.x, t.z);
+        masts.push(new THREE.Matrix4().compose(base.clone().add(new THREE.Vector3(0, 4.15, 0)), new THREE.Quaternion().setFromAxisAngle(up, yaw), new THREE.Vector3(0.22, 8.3, 0.3)));
+        // cantilever tube (upper) and registration arm (lower)
+        segment(local(s, -3.2, 6.3), local(s, stagger + 0.4, 6.3), 0.07, arms);
+        segment(local(s, -3.2, 5.0), local(s, stagger + 0.6, 5.05), 0.06, arms);
+        segment(local(s, -3.2, 5.0), local(s, -1.2, 6.3), 0.05, arms);
+        segment(local(s, stagger, WIRE_HEIGHT), local(s, stagger + 0.6, 5.05), 0.03, arms);
+      }
+      void pyNow;
+      if (sN > path.length) continue;
+      // contact wire (straight between registrations, zig-zag stagger)
+      const ca = local(s, stagger, WIRE_HEIGHT), cb = local(sN, staggerN, WIRE_HEIGHT);
+      // follow curvature: split the span in 5 parts
+      const parts = 5;
+      let prev = ca;
+      for (let k2 = 1; k2 <= parts; k2++) {
+        const f = k2 / parts;
+        const ss = s + SPAN * f;
+        const lat = stagger + (staggerN - stagger) * f;
+        const cur = k2 === parts ? cb : local(ss, lat, WIRE_HEIGHT);
+        segment(prev, cur, 0.014, wires);
+        // catenary wire with sag
+        const sag = 4 * f * (1 - f) * 1.05;
+        const fp = (k2 - 1) / parts, sagp = 4 * fp * (1 - fp) * 1.05;
+        const m0 = local(s + SPAN * fp, stagger + (staggerN - stagger) * fp, WIRE_HEIGHT + 1.3 - sagp);
+        const m1 = local(ss, lat, WIRE_HEIGHT + 1.3 - sag);
+        segment(m0, m1, 0.012, wires);
+        // dropper
+        if (k2 < parts) segment(local(ss, lat, WIRE_HEIGHT), m1, 0.006, wires);
+        prev = cur;
+      }
+    }
+  }
+  const inst = (list: THREE.Matrix4[], mat: THREE.Material, castShadow: boolean) => {
+    if (!list.length) return;
+    const im = new THREE.InstancedMesh(unitBox, mat, list.length);
+    list.forEach((m, i) => im.setMatrixAt(i, m));
+    im.castShadow = castShadow;
+    g.add(im);
+  };
+  inst(masts, M.mast, true);
+  inst(arms, M.mast, true);
+  inst(wires, M.wire, false);
+  g.traverse((o) => { o.matrixAutoUpdate = false; o.updateMatrix(); });
+  return g;
+}
