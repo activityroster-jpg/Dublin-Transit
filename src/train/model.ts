@@ -42,10 +42,10 @@ function sharedParts() {
   bodyMat.onBeforeCompile = (s) => {
     s.vertexShader = s.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vLocal;').replace('#include <begin_vertex>', '#include <begin_vertex>\nvLocal = position;');
     s.fragmentShader = s.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vLocal;').replace('#include <map_fragment>', `
-      vec3 green = vec3(0.02, 0.16, 0.07), lime = vec3(0.35, 0.62, 0.08), silver = vec3(0.72, 0.74, 0.74), roofc = vec3(0.32, 0.33, 0.34);
+      // all-green livery: body green, slightly darker roof
+      vec3 green = vec3(0.02, 0.17, 0.07), roofc = vec3(0.015, 0.11, 0.05);
       float y = vLocal.y;
-      vec3 c = y < 1.75 ? green : (y < 1.86 ? lime : (y < 3.25 ? silver : roofc));
-      if (y > 2.95 && y < 3.05) c = green;
+      vec3 c = y < 3.25 ? green : roofc;
       diffuseColor.rgb *= c;`);
   };
   bodyMat.customProgramCacheKey = () => 'dart-livery';
@@ -58,7 +58,7 @@ function sharedParts() {
     bogie: new THREE.MeshStandardMaterial({ color: 0x24282a, roughness: 0.7, metalness: 0.4 }),
     wheel,
     steel: new THREE.MeshStandardMaterial({ color: 0x8a8f93, roughness: 0.4, metalness: 0.8 }),
-    door: new THREE.MeshStandardMaterial({ color: 0xc9cdce, roughness: 0.3, metalness: 0.4 }),
+    door: new THREE.MeshStandardMaterial({ color: 0x0a4a22, roughness: 0.3, metalness: 0.4 }),
     yellow: new THREE.MeshStandardMaterial({ color: 0xf5c400, roughness: 0.35, metalness: 0.2 }),
     interior: new THREE.MeshStandardMaterial({ color: 0xd8dad6, roughness: 0.6, emissive: new THREE.Color(0.9, 0.95, 1), emissiveIntensity: 0.06 }),
     seat: new THREE.MeshStandardMaterial({ color: 0x1d3f6b, roughness: 0.9 }),
