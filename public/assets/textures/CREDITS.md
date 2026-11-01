@@ -2,13 +2,13 @@
 
 All textures are CC0 (public domain) from Poly Haven.
 
-- `terrain_grass`: Poly Haven "leafy_grass" (CC0) https://polyhaven.com/a/leafy_grass
-- `terrain_park`: Poly Haven "grass_ground" (CC0) https://polyhaven.com/a/grass_ground
-- `terrain_farm`: Poly Haven "withered_grass" (CC0) https://polyhaven.com/a/withered_grass
+- `terrain_grass`: Poly Haven "sparse_grass" (CC0) https://polyhaven.com/a/sparse_grass
+- `terrain_park`: Poly Haven "sparse_grass" (CC0) https://polyhaven.com/a/sparse_grass
+- `terrain_farm`: Poly Haven "grass_ground" (CC0) https://polyhaven.com/a/grass_ground
 - `terrain_forest`: Poly Haven "forest_floor" (CC0) https://polyhaven.com/a/forest_floor
-- `terrain_urban`: Poly Haven "grass_path_3" (CC0) https://polyhaven.com/a/grass_path_3
+- `terrain_urban`: Poly Haven "grass_ground" (CC0) https://polyhaven.com/a/grass_ground
 - `terrain_sand`: Poly Haven "coast_sand_01" (CC0) https://polyhaven.com/a/coast_sand_01
-- `terrain_rock`: Poly Haven "coast_land_rocks_01" (CC0) https://polyhaven.com/a/coast_land_rocks_01
+- `terrain_rock`: Poly Haven "aerial_rocks_02" (CC0) https://polyhaven.com/a/aerial_rocks_02
 - `terrain_gravel`: Poly Haven "gravel" (CC0) https://polyhaven.com/a/gravel
 - `terrain_paved`: Poly Haven "concrete_floor" (CC0) https://polyhaven.com/a/concrete_floor
 - `ballast`: Poly Haven "gravel" (CC0) https://polyhaven.com/a/gravel

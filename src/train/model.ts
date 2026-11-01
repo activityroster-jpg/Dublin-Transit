@@ -15,7 +15,7 @@ export const DOOR_Z = [-5.2, 5.2]; // door centres along each car (m from car ce
 export const DOOR_W = 1.3;
 
 let shared: {
-  body: THREE.BufferGeometry; bodyMat: THREE.MeshStandardMaterial; glass: THREE.MeshStandardMaterial; dark: THREE.MeshStandardMaterial;
+  body: THREE.BufferGeometry; bodyCab: THREE.BufferGeometry; bodyMat: THREE.MeshStandardMaterial; glass: THREE.MeshStandardMaterial; dark: THREE.MeshStandardMaterial;
   bogie: THREE.MeshStandardMaterial; wheel: THREE.BufferGeometry; steel: THREE.MeshStandardMaterial; door: THREE.MeshStandardMaterial;
   yellow: THREE.MeshStandardMaterial; interior: THREE.MeshStandardMaterial; seat: THREE.MeshStandardMaterial; rubber: THREE.MeshStandardMaterial;
 } | null = null;
@@ -35,6 +35,9 @@ function sharedParts() {
   sh.quadraticCurveTo(-hw, 0.95, -hw + 0.1, 0.95);
   const body = new THREE.ExtrudeGeometry(sh, { depth: CAR_LEN, bevelEnabled: false, curveSegments: 8 });
   body.translate(0, 0, -CAR_LEN / 2);
+  // cab cars: the same profile with a rounded (bevelled) front end
+  const bodyCab = new THREE.ExtrudeGeometry(sh, { depth: CAR_LEN - 0.9, bevelEnabled: true, bevelThickness: 0.45, bevelSize: 0.22, bevelSegments: 4, curveSegments: 8 });
+  bodyCab.translate(0, 0, -CAR_LEN / 2 + 0.45);
   const bodyMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.35, metalness: 0.3 });
   bodyMat.onBeforeCompile = (s) => {
     s.vertexShader = s.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vLocal;').replace('#include <begin_vertex>', '#include <begin_vertex>\nvLocal = position;');
@@ -49,7 +52,7 @@ function sharedParts() {
   const wheel = new THREE.CylinderGeometry(0.42, 0.42, 0.14, 18);
   wheel.rotateZ(Math.PI / 2);
   shared = {
-    body, bodyMat,
+    body, bodyCab, bodyMat,
     glass: new THREE.MeshStandardMaterial({ color: 0x1a2328, roughness: 0.04, metalness: 0.2, transparent: true, opacity: 0.55 }),
     dark: new THREE.MeshStandardMaterial({ color: 0x15181a, roughness: 0.6 }),
     bogie: new THREE.MeshStandardMaterial({ color: 0x24282a, roughness: 0.7, metalness: 0.4 }),
@@ -92,7 +95,11 @@ export class TrainModel {
     for (let i = 0; i < nCars; i++) {
       const g = new THREE.Group();
       const exterior: THREE.Object3D[] = [];
-      const body = new THREE.Mesh(S.body, S.bodyMat); body.castShadow = true; body.receiveShadow = true; g.add(body); exterior.push(body);
+      const isCab = i === 0 || i === nCars - 1;
+      const body = new THREE.Mesh(isCab ? S.bodyCab : S.body, S.bodyMat); body.castShadow = true; body.receiveShadow = true; g.add(body); exterior.push(body);
+      // roof conduits and vents
+      for (const rx of [-0.9, 0.9]) { const c = add(g, S.dark, 0.12, 0.1, CAR_LEN - 2, rx, ROOF_H + 0.04, 0); exterior.push(c); }
+      for (let vz = -7; vz <= 7; vz += 3.5) { const v = add(g, S.dark, 0.6, 0.12, 0.9, 0, ROOF_H + 0.05, vz); exterior.push(v); }
       // windows: band of glass with lit interior behind
       const doors = { left: [] as THREE.Mesh[], right: [] as THREE.Mesh[] };
       const doorLights: THREE.MeshStandardMaterial[] = [];
@@ -103,6 +110,9 @@ export class TrainModel {
           // leave the cab section at each end of the unit without saloon windows
           const za = i === nCars - 1 ? Math.max(z0, -7.6) : z0, zb = i === 0 ? Math.min(z1, 7.6) : z1;
           const w = add(g, S.glass, 0.02, 0.95, zb - za, x, 2.35, (za + zb) / 2); exterior.push(w);
+          const fr = add(g, S.rubber, 0.012, 1.03, zb - za + 0.08, x - side * 0.008, 2.35, (za + zb) / 2); exterior.push(fr);
+          // mullions between the panes
+          for (let mz = za + 1.45; mz < zb - 0.3; mz += 1.45) { const m = add(g, S.rubber, 0.025, 0.95, 0.05, x + side * 0.004, 2.35, mz); exterior.push(m); }
         }
         for (const dz of DOOR_Z) {
           for (const leaf of [-1, 1]) {

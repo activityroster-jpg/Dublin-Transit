@@ -40,9 +40,9 @@ export class Cab {
 
   constructor() {
     const g = this.group;
-    const shell = mat(0x9ea3a3, 0.7);
-    const darkPanel = mat(0x2b2f31, 0.55, 0.2);
-    const desk = mat(0x3a3f42, 0.5, 0.2);
+    const shell = mat(0xb9bdbd, 0.7);
+    const darkPanel = mat(0x3c4144, 0.55, 0.2);
+    const desk = mat(0x5a6064, 0.5, 0.2);
     const floor = mat(0x2a2a2a, 0.9);
     const glass = new THREE.MeshPhysicalMaterial({ color: 0xffffff, roughness: 0.02, metalness: 0, transmission: 0, transparent: true, opacity: 0.08, side: THREE.DoubleSide, depthWrite: false });
     /** Box at screen-x sx. */
@@ -70,15 +70,19 @@ export class Cab {
     // desk: flat top at the hands, then the instrument panel angled up to the windscreen sill
     P(desk, 2.7, 0.05, 0.6, 0, 1.98, ZF - 0.75);
     P(darkPanel, 2.7, 0.88, 0.05, 0, 1.54, ZF - 1.05);
-    P(darkPanel, 2.7, 0.3, 0.6, 0, 2.1, ZF - 0.3);              // body behind the angled panel
-    P(desk, 2.7, 0.02, 0.12, 0, SILL - 0.02, ZF - 0.1);          // ledge under the sill
+    // wedge under the angled panel: profile in (z, y), extruded across the cab
+    const wedge = new THREE.Shape();
+    wedge.moveTo(ZF - 0.47, 1.95); wedge.lineTo(ZF - 0.08, 1.95); wedge.lineTo(ZF - 0.08, SILL - 0.01); wedge.lineTo(ZF - 0.13, SILL - 0.01); wedge.lineTo(ZF - 0.47, 1.97);
+    const wg = new THREE.ExtrudeGeometry(wedge, { depth: 2.7, bevelEnabled: false });
+    const wm = new THREE.Mesh(wg, darkPanel); wm.rotation.y = -Math.PI / 2; wm.position.x = 1.35; wm.castShadow = true; g.add(wm);
     // wiper (pivot at the bottom of the screen)
     this.wiper = P(mat(0x111111), 0.03, 0.85, 0.02, DRIVER_SX, SILL, ZF + 0.0, false);
     this.wiper.geometry = new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0);
     // seat
-    P(mat(0x23272a, 0.9), 0.55, 0.12, 0.5, DRIVER_SX, 1.6, EYE.z + 0.2);
-    P(mat(0x23272a, 0.9), 0.55, 0.75, 0.1, DRIVER_SX, 2.02, EYE.z + 0.5).rotation.x = -0.15;
-    P(mat(0x444444, 0.5, 0.6), 0.08, 0.45, 0.08, DRIVER_SX, 1.3, EYE.z + 0.2);
+    // seat: cushion under the driver, back behind the eye (forward is +z)
+    P(mat(0x23272a, 0.9), 0.55, 0.12, 0.5, DRIVER_SX, 1.6, EYE.z - 0.2);
+    P(mat(0x23272a, 0.9), 0.55, 0.75, 0.1, DRIVER_SX, 2.02, EYE.z - 0.5).rotation.x = 0.15;
+    P(mat(0x444444, 0.5, 0.6), 0.08, 0.45, 0.08, DRIVER_SX, 1.3, EYE.z - 0.2);
 
     // Instrument panel: 45° face from (y 1.98, z ZF-0.45) up to (y 2.28, z ZF-0.15), facing the driver.
     // rotation (0.78, π, 0): local +x = screen x, local +y = up/away, normal = up/towards the driver.

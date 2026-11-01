@@ -102,12 +102,56 @@ export async function buildWorld() {
   land.sort((a, b) => b.area - a.area); // big first, small (more specific) last wins
   console.log(`polygons: ${land.length} landcover, ${water.length} water, ${buildings.length} buildings`);
 
-  // Coastline (land on the left, sea on the right)
-  const coast = new SegHash(64);
+  // Coastline (OSM: land on the left of the way, sea on the right). A jump-flood distance
+  // transform on a 32 m grid gives every point its nearest coast sample, so the sea side is
+  // known at any distance (SRTM is garbage over water: Killiney Bay reads 30 m).
+  const coastSeeds = []; // [x, z, dirx, dirz]
   for (const w of osm.ways.values()) {
     if (w.tags?.natural !== 'coastline') continue;
-    for (let i = 0; i < w.nodes.length - 1; i++) { const a = P(w.nodes[i]), b = P(w.nodes[i + 1]); if (a && b) coast.add(a[0], a[1], b[0], b[1], null); }
+    for (let i = 0; i < w.nodes.length - 1; i++) {
+      const a = P(w.nodes[i]), b = P(w.nodes[i + 1]); if (!a || !b) continue;
+      const L = Math.hypot(b[0] - a[0], b[1] - a[1]); if (L < 0.01) continue;
+      const dx = (b[0] - a[0]) / L, dz = (b[1] - a[1]) / L;
+      for (let t = 0; t < L; t += 12) coastSeeds.push([a[0] + dx * t, a[1] + dz * t, dx, dz]);
+    }
   }
+  const CG = 32;
+  const gx0 = Math.floor((bx0 - 7000) / CG), gz0 = Math.floor((bz0 - 7000) / CG), gw = Math.ceil((bx1 - bx0 + 14000) / CG), gh = Math.ceil((bz1 - bz0 + 14000) / CG);
+  const nearest = new Int32Array(gw * gh).fill(-1);
+  for (let i = 0; i < coastSeeds.length; i++) {
+    const [x, z] = coastSeeds[i];
+    const cx = Math.floor(x / CG) - gx0, cz = Math.floor(z / CG) - gz0;
+    if (cx >= 0 && cx < gw && cz >= 0 && cz < gh) nearest[cz * gw + cx] = i;
+  }
+  const d2 = (i, cx, cz) => { const sd = coastSeeds[i]; const px = (gx0 + cx + 0.5) * CG, pz = (gz0 + cz + 0.5) * CG; return (sd[0] - px) ** 2 + (sd[1] - pz) ** 2; };
+  for (let step = 1 << Math.ceil(Math.log2(Math.max(gw, gh))); step >= 1; step >>= 1) {
+    const prev = Int32Array.from(nearest);
+    for (let cz = 0; cz < gh; cz++) for (let cx = 0; cx < gw; cx++) {
+      let best = prev[cz * gw + cx], bd = best >= 0 ? d2(best, cx, cz) : Infinity;
+      for (let j = -1; j <= 1; j++) for (let i = -1; i <= 1; i++) {
+        if (!i && !j) continue;
+        const nx = cx + i * step, nz = cz + j * step;
+        if (nx < 0 || nz < 0 || nx >= gw || nz >= gh) continue;
+        const c = prev[nz * gw + nx];
+        if (c < 0) continue;
+        const dd = d2(c, cx, cz);
+        if (dd < bd) { bd = dd; best = c; }
+      }
+      nearest[cz * gw + cx] = best;
+    }
+  }
+  console.log(`coast: ${coastSeeds.length} samples, grid ${gw}x${gh}`);
+  /** { d: distance to the coast, sea: boolean } or null far from any coast. */
+  const coastInfo = (x, z) => {
+    const cx = Math.floor(x / CG) - gx0, cz = Math.floor(z / CG) - gz0;
+    if (cx < 0 || cz < 0 || cx >= gw || cz >= gh) return null;
+    const i = nearest[cz * gw + cx];
+    if (i < 0) return null;
+    const sd = coastSeeds[i];
+    const rx = x - sd[0], rz = z - sd[1];
+    const cross = sd[2] * rz - sd[3] * rx;
+    return { d: Math.hypot(rx, rz), sea: cross > 0 };
+  };
 
   // ---- Near terrain tiles ----
   const nearTiles = new Set();
@@ -140,11 +184,19 @@ export async function buildWorld() {
       for (const p of myBld) if (x >= p.bbox[0] && x <= p.bbox[2] && z >= p.bbox[1] && z <= p.bbox[3] && pointInRing(x, z, p.ring)) { c = CLS.PAVED; break; }
       let inWater = false;
       for (const p of myWater) if (x >= p.bbox[0] && x <= p.bbox[2] && z >= p.bbox[1] && z <= p.bbox[3] && pointInRing(x, z, p.ring)) { inWater = true; break; }
+      if (h < -50) h = -3; // DEM void
       // coastline: crisp shore
-      const cs = coast.nearest(x, z, 120);
+      const cs = coastInfo(x, z);
       if (cs) {
-        if (cs.side > 0) { h = Math.min(h, -0.6 - cs.d * 0.04); c = CLS.SAND; }
-        else if (cs.d < 25) { h = Math.max(h, 0.4 + cs.d * 0.05); if (c === CLS.GRASS) c = CLS.SAND; }
+        if (cs.sea) { h = Math.min(h, -0.6 - cs.d * 0.04); c = CLS.SAND; }
+        else if (cs.d < 100) {
+          // shore: ease the land down to a beach/shingle slope rather than a wall (SRTM smears
+          // hills onto beaches); genuine cliffs above ~35 m are kept
+          const shore = 0.5 + cs.d * 0.16;
+          if (h > shore && h < 35) h = shore + (h - shore) * (cs.d / 100) ** 2;
+          h = Math.max(h, 0.4 + cs.d * 0.02);
+          if (cs.d < 18 && c === CLS.GRASS) c = CLS.SAND;
+        }
       }
       if (inWater) { h = Math.min(h, -1.2); c = CLS.WATERBED; }
       // carve to the railway formation
@@ -200,11 +252,13 @@ export async function buildWorld() {
     for (let j = 0; j < FN; j++) for (let i = 0; i < FN; i++) {
       const x = ix * FAR.size + i * fcell, z = iz * FAR.size + j * fcell;
       let h = naturalFar(x, z);
-      const cs = coast.nearest(x, z, 200);
-      if (cs && cs.side > 0) h = Math.min(h, -1 - cs.d * 0.03);
-      // Sink below the near terrain where it is fully covered, so the detailed tiles win.
+      if (h < -50) h = -3;
+      const cs = coastInfo(x, z);
+      if (cs && cs.sea) h = Math.min(h, -1 - cs.d * 0.03);
+      // Where detailed tiles exist, follow the carved near terrain (slightly below it) so the
+      // backdrop never pokes through cuttings or the carved coast.
       const covered = [[-1, -1], [1, -1], [-1, 1], [1, 1]].every(([a, b]) => nearTiles.has(`${Math.floor((x + a * fcell) / NEAR.size)}_${Math.floor((z + b * fcell) / NEAR.size)}`));
-      if (covered) h -= 6;
+      if (covered) h = heightAt(x, z) - 1.5;
       farBuf.writeInt16LE(Math.max(-32768, Math.min(32767, Math.round(h * 10))), off); off += 2;
     }
   }
@@ -300,7 +354,7 @@ export async function buildWorld() {
   for (const p of woods) {
     const [x0, z0, x1, z1] = p.bbox;
     const area = (x1 - x0) * (z1 - z0);
-    const dens = p.cls === CLS.FOREST ? 1 / 45 : 1 / 400;
+    const dens = p.cls === CLS.FOREST ? 1 / 28 : 1 / 300;
     const count = Math.min(6000, Math.floor(area * dens));
     for (let k = 0; k < count; k++) {
       const x = x0 + rnd() * (x1 - x0), z = z0 + rnd() * (z1 - z0);
@@ -326,10 +380,10 @@ export async function buildWorld() {
       const x = p.pts[i * 3], z = p.pts[i * 3 + 2];
       const dx = p.pts[i * 3 + 3] - p.pts[i * 3 - 3], dz = p.pts[i * 3 + 5] - p.pts[i * 3 - 1], L = Math.hypot(dx, dz) || 1;
       const rx = -dz / L, rz = dx / L;
-      for (let k = 0; k < 2; k++) {
-        if (rnd() > 0.75) continue;
+      for (let k = 0; k < 3; k++) {
+        if (rnd() > 0.6) continue;
         const side = rnd() < 0.5 ? -1 : 1;
-        const dist = 7 + rnd() * rnd() * 30;
+        const dist = 6.5 + rnd() * rnd() * 38;
         const px = x + rx * side * dist + (rnd() - 0.5) * 4, pz = z + rz * side * dist + (rnd() - 0.5) * 4;
         const ti = trackInfo(px, pz, 30);
         if (ti && ti.d < 6.5) continue;

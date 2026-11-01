@@ -1,0 +1,65 @@
+{
+ "credit": "Poly Haven (CC0) https://polyhaven.com/hdris",
+ "skies": [
+  {
+   "id": "day_partly",
+   "kind": "day",
+   "source": "kloofendal_48d_partly_cloudy_puresky",
+   "sunAz": 0.5965,
+   "sunEl": 0.8297,
+   "sunStrength": 26.5,
+   "upperMean": 1.1453,
+   "exposure": 1.0
+  },
+  {
+   "id": "day_overcast",
+   "kind": "overcast",
+   "source": "kloofendal_overcast_puresky",
+   "sunAz": 0.5758,
+   "sunEl": 0.3941,
+   "sunStrength": 4.6,
+   "upperMean": 1.2023,
+   "exposure": 1.4
+  },
+  {
+   "id": "morning_mist",
+   "kind": "mist",
+   "source": "kloofendal_misty_morning_puresky",
+   "sunAz": 0.7177,
+   "sunEl": 0.7798,
+   "sunStrength": 1.4,
+   "upperMean": 1.1571,
+   "exposure": 1.3
+  },
+  {
+   "id": "golden",
+   "kind": "lowsun",
+   "source": "kloppenheim_06_puresky",
+   "sunAz": 0.5319,
+   "sunEl": 0.2542,
+   "sunStrength": 10.1,
+   "upperMean": 0.7815,
+   "exposure": 1.6
+  },
+  {
+   "id": "sunset",
+   "kind": "sunset",
+   "source": "belfast_sunset_puresky",
+   "sunAz": 0.6242,
+   "sunEl": 0.0439,
+   "sunStrength": 18.5,
+   "upperMean": 1.2256,
+   "exposure": 1.8
+  },
+  {
+   "id": "night",
+   "kind": "night",
+   "source": "kloppenheim_02_puresky",
+   "sunAz": 0.581,
+   "sunEl": 0.3317,
+   "sunStrength": 15.8,
+   "upperMean": 0.3552,
+   "exposure": 1.0
+  }
+ ]
+}

@@ -10,13 +10,13 @@ os.makedirs(OUT, exist_ok=True)
 
 # name in game -> (polyhaven id, maps, size)
 TEX = {
-    'terrain_grass':   ('leafy_grass', ['diff'], 512),
-    'terrain_park':    ('grass_ground', ['diff'], 512),
-    'terrain_farm':    ('withered_grass', ['diff'], 512),
+    'terrain_grass':   ('sparse_grass', ['diff'], 512),
+    'terrain_park':    ('sparse_grass', ['diff'], 512),
+    'terrain_farm':    ('grass_ground', ['diff'], 512),
     'terrain_forest':  ('forest_floor', ['diff'], 512),
-    'terrain_urban':   ('grass_path_3', ['diff'], 512),
+    'terrain_urban':   ('grass_ground', ['diff'], 512),
     'terrain_sand':    ('coast_sand_01', ['diff'], 512),
-    'terrain_rock':    ('coast_land_rocks_01', ['diff'], 512),
+    'terrain_rock':    ('aerial_rocks_02', ['diff'], 512),
     'terrain_gravel':  ('gravel', ['diff'], 512),
     'terrain_paved':   ('concrete_floor', ['diff'], 512),
     'ballast':         ('gravel', ['diff', 'nor_gl', 'arm'], 1024),

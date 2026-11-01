@@ -101,7 +101,7 @@ vec3 layerCol(float L, vec2 uv){
   vec2 tuv = vWPos.xz;
   vec3 col = vec3(0.0); float wsum = 0.0;
   float ws[9]; ws[0]=vW0.x; ws[1]=vW0.y; ws[2]=vW0.z; ws[3]=vW0.w; ws[4]=vW1.x; ws[5]=vW1.y; ws[6]=vW1.z; ws[7]=vW1.w; ws[8]=vW2;
-  for (int i = 0; i < ${LAYERS}; i++) { if (ws[i] > 0.02) { col += layerCol(float(i), tuv) * ws[i]; wsum += ws[i]; } }
+  for (int i = 0; i < ${LAYERS}; i++) { if (ws[i] > 0.02) { vec3 lc = layerCol(float(i), tuv); if (i == 5) lc *= vec3(0.78, 0.75, 0.72); if (i == 4) lc *= 0.8; if (i == 2) lc *= vec3(0.6, 0.7, 0.5); if (i == 0) lc *= vec3(0.95, 1.0, 0.9); if (i == 1 || i == 7) lc *= vec3(0.78, 1.0, 0.7); if (i == 6) lc *= vec3(0.85, 1.0, 0.8); col += lc * ws[i]; wsum += ws[i]; } }
   col /= max(wsum, 0.001);
   float n = tNoise(vWPos.xz * 0.05) * 0.6 + tNoise(vWPos.xz * 0.21) * 0.4;
   col *= 0.82 + n * 0.32;

@@ -1,14 +1,20 @@
-// Renderer, sky, sun, fog, shadows and post-processing.
+// Renderer, real-sky HDRI lighting (Poly Haven CC0, chosen by sun elevation and weather),
+// sun shadows, fog matched to the sky's horizon, and post-processing.
 import * as THREE from 'three';
-import { Sky } from 'three/addons/objects/Sky.js';
+import { HDRLoader } from 'three/addons/loaders/HDRLoader.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js';
+import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import type { QualitySettings } from '../core/env';
 import { sunPosition } from '../core/sun';
 import { clamp, smoothstep } from '../core/rand';
+
+interface SkyDef { id: string; kind: string; sunAz: number; sunEl: number; sunStrength: number; upperMean: number; exposure: number }
+interface LoadedSky { def: SkyDef; bg: THREE.Texture; env: THREE.Texture; horizon: THREE.Color }
+const SKY_BASE = `${import.meta.env.BASE_URL}assets/sky/`;
 
 export class Engine {
   readonly renderer: THREE.WebGLRenderer;
@@ -16,28 +22,33 @@ export class Engine {
   camera: THREE.PerspectiveCamera;
   readonly sun: THREE.DirectionalLight;
   readonly hemi: THREE.HemisphereLight;
-  readonly sky: Sky;
   readonly q: QualitySettings;
   private composer: EffectComposer | null = null;
   private renderPass: RenderPass | null = null;
   private bloom: UnrealBloomPass | null = null;
+  private gtao: GTAOPass | null = null;
   private pmrem: THREE.PMREMGenerator;
-  private envRT: THREE.WebGLRenderTarget | null = null;
-  private skyScene = new THREE.Scene();
-  private skyForEnv: Sky;
   readonly sunDir = new THREE.Vector3(0, 1, 0);
   /** 0 = full day, 1 = full night. Drives lamps and windows. */
   night = 0;
-  /** Exposure multiplier when in tunnels. */
   tunnelFactor = 0;
   private baseExposure = 0.55;
   private sunBase = 3;
-  private hemiBase = 0.6;
-  private envBase = 1;
+  private hemiBase = 0.3;
+  private envBase = 0.6;
+  private skyDefs: SkyDef[] = [];
+  private skies = new Map<string, Promise<LoadedSky>>();
+  private currentSky: LoadedSky | null = null;
+  private wantedSky = '';
+  private loadingSky = '';
+  /** Resolves when the first sky is on screen (used by the loading screen). */
+  readonly skyReady: Promise<void>;
+  private resolveSkyReady!: () => void;
 
   constructor(container: HTMLElement, q: QualitySettings) {
     this.q = q;
-    this.renderer = new THREE.WebGLRenderer({ antialias: !q.postFX, powerPreference: 'high-performance', logarithmicDepthBuffer: false });
+    this.skyReady = new Promise<void>((res) => (this.resolveSkyReady = res));
+    this.renderer = new THREE.WebGLRenderer({ antialias: !q.postFX, powerPreference: 'high-performance' });
     this.renderer.setPixelRatio(q.pixelRatio);
     this.renderer.setSize(container.clientWidth, container.clientHeight);
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -50,14 +61,6 @@ export class Engine {
 
     this.camera = new THREE.PerspectiveCamera(60, container.clientWidth / container.clientHeight, 0.05, 24000);
 
-    this.sky = new Sky();
-    this.sky.scale.setScalar(20000);
-    this.scene.add(this.sky);
-    this.skyForEnv = new Sky();
-    this.skyForEnv.scale.setScalar(1000);
-    (this.skyForEnv.material as THREE.ShaderMaterial).uniforms.showSunDisc.value = 0;
-    this.skyScene.add(this.skyForEnv);
-
     this.sun = new THREE.DirectionalLight(0xffffff, 3);
     this.sun.castShadow = true;
     this.sun.shadow.mapSize.set(q.shadowMapSize, q.shadowMapSize);
@@ -66,12 +69,69 @@ export class Engine {
     this.sun.shadow.bias = -0.0004;
     this.sun.shadow.normalBias = 0.04;
     this.scene.add(this.sun, this.sun.target);
-    this.hemi = new THREE.HemisphereLight(0xbfd8ff, 0x55603a, 0.6);
+    this.hemi = new THREE.HemisphereLight(0xbfd8ff, 0x55603a, 0.3);
     this.scene.add(this.hemi);
-    this.scene.fog = new THREE.FogExp2(0xbfd0e0, 0.00022);
+    this.scene.fog = new THREE.FogExp2(0xbfd0e0, 0.00018);
+    this.scene.background = new THREE.Color(0x9fb4c8);
 
     this.pmrem = new THREE.PMREMGenerator(this.renderer);
+    this.pmrem.compileEquirectangularShader();
     if (q.postFX) this.setupPost(container);
+    void this.loadManifest();
+  }
+
+  private async loadManifest() {
+    try {
+      const r = await fetch(SKY_BASE + 'skies.json');
+      const j = (await r.json()) as { skies: SkyDef[] };
+      this.skyDefs = j.skies;
+      if (this.wantedSky) this.applySky(this.wantedSky);
+    } catch (e) { console.warn('skies manifest missing', e); this.resolveSkyReady(); }
+  }
+
+  private loadSky(id: string): Promise<LoadedSky> {
+    let p = this.skies.get(id);
+    if (!p) {
+      p = (async () => {
+        const def = this.skyDefs.find((s) => s.id === id)!;
+        const [bg, hdr] = await Promise.all([
+          new Promise<THREE.Texture>((res, rej) => new THREE.TextureLoader().load(`${SKY_BASE}${id}.jpg`, res, undefined, rej)),
+          new Promise<THREE.DataTexture>((res, rej) => new HDRLoader().load(`${SKY_BASE}${id}_1k.hdr`, res, undefined, rej)),
+        ]);
+        bg.mapping = THREE.EquirectangularReflectionMapping;
+        bg.colorSpace = THREE.SRGBColorSpace;
+        bg.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
+        hdr.mapping = THREE.EquirectangularReflectionMapping;
+        const env = this.pmrem.fromEquirectangular(hdr).texture;
+        hdr.dispose();
+        // horizon colour from the background image, for the fog
+        const img = bg.image as HTMLImageElement;
+        const cv = document.createElement('canvas'); cv.width = 64; cv.height = 32;
+        const ctx = cv.getContext('2d')!;
+        ctx.drawImage(img, 0, 0, 64, 32);
+        const d = ctx.getImageData(0, 15, 64, 2).data;
+        let cr = 0, cg = 0, cb = 0;
+        for (let i = 0; i < d.length; i += 4) { cr += d[i]; cg += d[i + 1]; cb += d[i + 2]; }
+        const n = d.length / 4;
+        const horizon = new THREE.Color(cr / n / 255, cg / n / 255, cb / n / 255).convertSRGBToLinear();
+        return { def, bg, env, horizon };
+      })();
+      this.skies.set(id, p);
+    }
+    return p;
+  }
+
+  private applySky(id: string) {
+    if (!this.skyDefs.length || this.loadingSky === id || this.currentSky?.def.id === id) return;
+    this.loadingSky = id;
+    void this.loadSky(id).then((sky) => {
+      this.loadingSky = '';
+      if (this.wantedSky !== id) { this.applySky(this.wantedSky); return; }
+      this.currentSky = sky;
+      this.scene.background = sky.bg;
+      this.scene.environment = sky.env;
+      this.resolveSkyReady();
+    }).catch((e) => { console.warn('sky load failed', e); this.loadingSky = ''; this.resolveSkyReady(); });
   }
 
   private setupPost(container: HTMLElement) {
@@ -80,7 +140,14 @@ export class Engine {
     this.composer = new EffectComposer(this.renderer, rt);
     this.renderPass = new RenderPass(this.scene, this.camera);
     this.composer.addPass(this.renderPass);
-    this.bloom = new UnrealBloomPass(new THREE.Vector2(w, h), 0.18, 0.5, 0.92);
+    if (this.q.quality === 'high') {
+      this.gtao = new GTAOPass(this.scene, this.camera, w, h);
+      this.gtao.updateGtaoMaterial({ radius: 1.2, distanceExponent: 1.5, thickness: 0.6, scale: 1.2, samples: 12, distanceFallOff: 1 });
+      this.gtao.output = GTAOPass.OUTPUT.Default;
+      this.gtao.blendIntensity = 0.8;
+      this.composer.addPass(this.gtao);
+    }
+    this.bloom = new UnrealBloomPass(new THREE.Vector2(w, h), 0.12, 0.5, 0.95);
     this.composer.addPass(this.bloom);
     this.composer.addPass(new OutputPass());
     if (!this.q.msaa) this.composer.addPass(new SMAAPass());
@@ -89,6 +156,7 @@ export class Engine {
   setCamera(cam: THREE.PerspectiveCamera) {
     this.camera = cam;
     if (this.renderPass) this.renderPass.camera = cam;
+    if (this.gtao) this.gtao.camera = cam;
   }
 
   resize(w: number, h: number) {
@@ -98,7 +166,7 @@ export class Engine {
     this.camera.updateProjectionMatrix();
   }
 
-  /** Sets sun, sky, fog and ambient for a time of day (local Dublin time). */
+  /** Sets sun, sky, fog and ambient for a time of day (local Dublin time). overcast 0..1. */
   setTime(date: Date, overcast = 0.35) {
     const { elevation, azimuth } = sunPosition(date);
     // Azimuth from north clockwise -> world: north = -z, east = +x.
@@ -108,47 +176,53 @@ export class Engine {
     const day = smoothstep(-6, 8, elevDeg);
     this.night = 1 - smoothstep(-8, 2, elevDeg);
     const golden = 1 - smoothstep(3, 20, elevDeg);
-    for (const s of [this.sky, this.skyForEnv]) {
-      const u = (s.material as THREE.ShaderMaterial).uniforms;
-      u.sunPosition.value.copy(this.sunDir);
-      u.turbidity.value = 3 + overcast * 6;
-      u.rayleigh.value = 1.2 + golden * 1.5;
-      u.mieCoefficient.value = 0.004 + overcast * 0.004;
-      u.mieDirectionalG.value = 0.82;
-      u.cloudCoverage.value = 0.35 + overcast * 0.45;
-      u.cloudDensity.value = 0.5 + overcast * 0.4;
-      u.cloudElevation.value = 0.6;
+    // choose the real-sky HDRI
+    const hour = date.getHours() + date.getMinutes() / 60;
+    let id: string;
+    if (elevDeg < -5) id = 'night';
+    else if (elevDeg < 5) id = 'sunset';
+    else if (elevDeg < 13) id = 'golden';
+    else if (overcast > 0.6) id = 'day_overcast';
+    else if (hour < 9.5 && overcast > 0.3) id = 'morning_mist';
+    else id = 'day_partly';
+    if (id !== this.wantedSky) { this.wantedSky = id; this.applySky(id); }
+    // rotate the sky so its sun sits at the real sun's azimuth
+    const sky = this.currentSky;
+    if (sky) {
+      const realAngle = Math.atan2(this.sunDir.z, this.sunDir.x); // angle from +x towards +z
+      const rot = sky.def.sunAz - realAngle;
+      this.scene.backgroundRotation.set(0, rot, 0);
+      this.scene.environmentRotation.set(0, rot, 0);
     }
+    const kind = sky?.def.kind ?? 'day';
     const sunCol = new THREE.Color().setRGB(1, 0.93 - golden * 0.25, 0.85 - golden * 0.45);
     this.sun.color.copy(sunCol);
-    this.sun.intensity = 3.6 * day * (1 - overcast * 0.45);
-    this.hemi.intensity = 0.32 + 0.4 * day;
+    const cloudy = kind === 'overcast' ? 0.25 : kind === 'mist' ? 0.5 : 1 - overcast * 0.35;
+    this.sunBase = 3.4 * day * cloudy;
+    this.hemiBase = 0.1 + 0.15 * day;
     this.hemi.color.setRGB(0.65 + 0.1 * day, 0.75 + 0.1 * day, 1.0);
     this.hemi.groundColor.setRGB(0.28 * day + 0.08, 0.3 * day + 0.08, 0.22 * day + 0.1);
-    const fogDay = new THREE.Color(0.72, 0.79, 0.86).lerp(new THREE.Color(0.85, 0.72, 0.6), golden * 0.6);
-    const fogNight = new THREE.Color(0.045, 0.055, 0.085);
-    (this.scene.fog as THREE.FogExp2).color.copy(fogNight.lerp(fogDay, day));
-    (this.scene.fog as THREE.FogExp2).density = 0.00016 + overcast * 0.00012;
-    this.sunBase = this.sun.intensity; this.hemiBase = this.hemi.intensity;
-    this.baseExposure = 0.5 + this.night * 0.9;
-    this.renderer.toneMappingExposure = this.baseExposure;
-    if (this.bloom) this.bloom.strength = 0.12 + this.night * 0.25;
-    if (this.lastEnv == null || Math.abs(date.getTime() - this.lastEnv) > 180_000) { this.lastEnv = date.getTime(); this.updateEnvironment(); }
-    else this.scene.environmentIntensity = this.envBase;
+    this.envBase = sky ? (kind === 'night' ? 0.9 : 0.75) : 0.6;
+    const fog = this.scene.fog as THREE.FogExp2;
+    if (sky) fog.color.copy(sky.horizon);
+    else fog.color.copy(new THREE.Color(0.045, 0.055, 0.085).lerp(new THREE.Color(0.72, 0.79, 0.86), day));
+    fog.density = 0.00015 + overcast * 0.0001 + (kind === 'mist' ? 0.00025 : 0);
+    this.baseExposure = kind === 'night' ? 1.3 : kind === 'sunset' ? 0.7 : 0.62;
+    if (this.bloom) this.bloom.strength = 0.1 + this.night * 0.25;
+    this.applyLighting();
   }
-  private lastEnv: number | null = null;
 
-  private updateEnvironment() {
-    this.envRT?.dispose();
-    this.envRT = this.pmrem.fromScene(this.skyScene as unknown as THREE.Scene, 0, 0.1, 2000);
-    this.scene.environment = this.envRT.texture;
-    this.envBase = 0.35 + 0.65 * (1 - this.night);
-    this.scene.environmentIntensity = this.envBase;
+  private applyLighting() {
+    const f = this.tunnelFactor;
+    this.sun.intensity = this.sunBase * (1 - f);
+    this.hemi.intensity = this.hemiBase * (1 - 0.9 * f);
+    this.scene.environmentIntensity = this.envBase * (1 - 0.9 * f);
+    this.scene.backgroundIntensity = 1;
+    this.renderer.toneMappingExposure = this.baseExposure * (1 + f * 1.2);
   }
 
   /** Keeps the shadow frustum centred on the camera, snapped to texels to avoid shimmering. */
   updateShadows(focus: THREE.Vector3) {
-    this.sky.position.copy(focus);
     const r = this.q.shadowRange;
     const texel = (2 * r) / this.q.shadowMapSize;
     const lightRot = new THREE.Matrix4().lookAt(new THREE.Vector3(), this.sunDir.clone().negate(), new THREE.Vector3(0, 1, 0));
@@ -164,11 +238,7 @@ export class Engine {
 
   setTunnel(factor: number) {
     this.tunnelFactor = clamp(factor, 0, 1);
-    const f = this.tunnelFactor;
-    this.sun.intensity = this.sunBase * (1 - f);
-    this.hemi.intensity = this.hemiBase * (1 - 0.9 * f);
-    this.scene.environmentIntensity = this.envBase * (1 - 0.9 * f);
-    this.renderer.toneMappingExposure = this.baseExposure * (1 + f * 1.2);
+    this.applyLighting();
   }
 
   render() {

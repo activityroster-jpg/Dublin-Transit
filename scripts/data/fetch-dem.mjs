@@ -12,6 +12,20 @@ export function lonLatToTile(lon, lat, z) {
   return [x, y];
 }
 
+/** Removes SRTM spikes (tall buildings, masts, data errors): clamps any sample more than 6 m above
+ *  the median of its 7x7 neighbourhood down to that median + 1.5 m. */
+function despike(h, n) {
+  const src = Float32Array.from(h);
+  const win = new Float32Array(49);
+  for (let y = 3; y < n - 3; y++) for (let x = 3; x < n - 3; x++) {
+    let k = 0;
+    for (let j = -3; j <= 3; j++) for (let i = -3; i <= 3; i++) win[k++] = src[(y + j) * n + x + i];
+    const sorted = win.slice().sort();
+    const med = sorted[24];
+    if (src[y * n + x] > med + 6) h[y * n + x] = med + 1.5;
+  }
+}
+
 export class Dem {
   constructor(z) { this.z = z; this.tiles = new Map(); }
   async load(minLat, minLon, maxLat, maxLon) {
@@ -25,6 +39,7 @@ export class Dem {
         const png = PNG.sync.read(buf);
         const h = new Float32Array(TILE * TILE);
         for (let i = 0; i < TILE * TILE; i++) h[i] = png.data[i * 4] * 256 + png.data[i * 4 + 1] + png.data[i * 4 + 2] / 256 - 32768;
+        if (this.z >= 13) despike(h, TILE);
         this.tiles.set(key, h);
       }
     }

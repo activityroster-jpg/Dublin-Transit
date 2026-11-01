@@ -20,3 +20,4 @@ npm run build      # production build into dist/
 - Map data © OpenStreetMap contributors, ODbL. <https://www.openstreetmap.org/copyright>
 - Timetable: National Transport Authority GTFS (Irish Rail), CC BY 4.0.
 - Elevation: AWS Terrain Tiles (Mapzen/Tilezen, sources SRTM, GMTED, ETOPO1).
+- Textures and sky HDRIs: [Poly Haven](https://polyhaven.com) (CC0). See `public/assets/textures/CREDITS.md` and `public/assets/sky/skies.json`.

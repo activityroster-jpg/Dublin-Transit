@@ -59,7 +59,7 @@ export class DartGame {
   clock: number;
   private cameras: Record<CameraMode, THREE.PerspectiveCamera>;
   camera: CameraMode = 'cab';
-  private look = { yaw: 0, pitch: -0.06, dist: 30, az: 2.2, el: 0.12 };
+  private look = { yaw: 0, pitch: -0.06, dist: 36, az: 2.2, el: 0.45 };
   private free = { pos: new THREE.Vector3(), yaw: 0, pitch: 0, keys: new Set<string>() };
   private trackside = { s: 0 };
   private doorTarget = { left: 0, right: 0 };
@@ -73,6 +73,8 @@ export class DartGame {
   state: 'ready' | 'driving' | 'finished' | 'failed' = 'ready';
   failReason = '';
   private t = 0;
+  /** Rendered frame counter (used by tooling). */
+  frames = 0;
   private last = performance.now();
   private raf = 0;
   private rnd = rng(42);
@@ -150,6 +152,8 @@ export class DartGame {
 
   async load(onProgress: (label: string, f: number) => void) {
     await this.world.init();
+    onProgress('Sky', 0);
+    await Promise.race([this.engine.skyReady, new Promise((r) => setTimeout(r, 20000))]);
     const p = this.path.point(this.phys.s);
     await this.world.prime(p, (f) => onProgress('Building the line', f));
     this.pax.prepare(this.stops[0].st, this.clock, false, true);
@@ -260,6 +264,7 @@ export class DartGame {
     this.last = now;
     if (this.paused) dt = 0;
     this.t += dt;
+    this.frames++;
     if (this.state === 'driving' && dt > 0) this.simulate(dt);
     this.updateVisuals(dt);
     this.engine.render();

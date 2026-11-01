@@ -36,7 +36,7 @@ export class World {
   private terrainMat!: THREE.Material;
   private farMat!: THREE.Material;
   private trackMats: TrackMaterials;
-  private lastCheck = -1;
+  private lastCheck = -1e9;
   readonly playerSignals = new Map<number, SignalMesh>();
   private ready = false;
 
@@ -56,8 +56,8 @@ export class World {
   async prime(cam: THREE.Vector3, onProgress: (f: number) => void) {
     this.update(cam, 0, true);
     const total = this.queue.length;
-    while (this.queue.length) {
-      await this.process(12);
+    while (this.queue.length || this.inflight) {
+      await this.process(12, 1e9);
       onProgress(1 - this.queue.length / Math.max(1, total));
       await new Promise((r) => setTimeout(r, 0));
     }
@@ -70,10 +70,11 @@ export class World {
     this.queue.push({ key, dist, build });
   }
 
-  update(cam: THREE.Vector3, time: number, force = false) {
+  update(cam: THREE.Vector3, _time: number, force = false) {
     if (!this.ready) return;
-    if (!force && time - this.lastCheck < 0.4) { void this.process(this.q.quality === 'low' ? 2 : 4); return; }
-    this.lastCheck = time;
+    const now = performance.now();
+    if (!force && now - this.lastCheck < 400) { void this.process(this.q.quality === 'low' ? 6 : 10, 7); return; }
+    this.lastCheck = now;
     const needed = new Set<string>();
     const VD = this.q.viewDistance;
     const hf = this.hf;
@@ -165,23 +166,41 @@ export class World {
     }
     this.queue = this.queue.filter((q) => needed.has(q.key));
     this.queue.sort((a, b) => a.dist - b.dist);
-    void this.process(4);
+    void this.process(10, 7);
   }
 
-  private async process(n: number) {
+  /** Builds everything queued (used for screenshots and the loading screen). */
+  async drain() { while (this.queue.length || this.inflight) { await this.process(50, 1e9); await new Promise((r) => setTimeout(r, 0)); } }
+
+  private inflight = 0;
+  private processing = 0;
+  /** Builds up to n queued items, stopping early once budgetMs of synchronous work has been spent. */
+  private async process(n: number, budgetMs = 7) {
+    if (this.processing > 1) return;
+    this.processing++;
+    const t0 = performance.now();
+    try {
     for (let k = 0; k < n && this.queue.length; k++) {
+      if (performance.now() - t0 > budgetMs) break;
       const job = this.queue.shift()!;
       const it = this.items.get(job.key);
       if (!it) continue;
-      const res = job.build();
-      const obj = res instanceof Promise ? await res : res;
+      this.inflight++;
+      let obj: THREE.Object3D | null = null;
+      try {
+        const res = job.build();
+        obj = res instanceof Promise ? await res : res;
+      } catch (e) {
+        console.error(`world: failed to build ${job.key}`, e);
+      } finally { this.inflight--; }
       if (!this.items.has(job.key)) { if (obj) disposeObj(obj); continue; }
       it.obj = obj; it.pending = false;
       if (obj) this.group.add(obj);
     }
+    } finally { this.processing--; }
   }
 
-  get pendingCount() { return this.queue.length; }
+  get pendingCount() { return this.queue.length + this.inflight; }
 
   private buildGrassChunk(path: TrackPath, ci: number): THREE.Object3D | null {
     const s0 = ci * CHUNK, s1 = Math.min(path.length, s0 + CHUNK);

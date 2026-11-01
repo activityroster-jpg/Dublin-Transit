@@ -2,6 +2,12 @@
 
 *Living brief. Last updated 1 Nov 2026.*
 
+**Current state (code-only build, no commissioned art):** see [`docs/mockups/`](mockups/) for
+screenshots rendered from the game: Killiney Bay, the cab by day and night, Dún Laoghaire
+platform, the Pearse viaduct, Howth harbour. Everything in them is generated from real data
+plus CC0 textures and real-sky HDRIs; the train and cab are placeholders until an artist is
+brought in.
+
 ## In one paragraph
 
 **Dublin Transit** is a driving simulator for Dublin's public transport that runs in a web browser.
@@ -24,7 +30,8 @@ there is mostly **art production**, not code:
 |---|---|---|
 | Track, sleepers, ballast, overhead wires and masts | Generated in code along the real track line | Yes |
 | Terrain, cuttings, embankments, sea wall, coast | Real elevation data plus the coastline, shaped around the railway | Yes, close |
-| Lineside bushes and trees, sky, sun, haze, water | Code and shaders | Yes, close |
+| Sky, sun and sky light | Real photographed sky domes (HDRIs, CC0) picked by time of day and weather, rotated to the real sun position | Yes |
+| Lineside bushes and trees, haze, water | Code and shaders | Yes, close |
 | Streets and buildings | Real OpenStreetMap footprints and heights, with generated facades | Good, but generic: not a copy of each real building |
 | **Driver's cab interior** | Needs a 3D artist (or photos of a real cab to model from) | **Not without an artist**. Placeholder cab until then |
 | **Train exterior** | Same | Good silhouette in code. Fine detail needs an artist |
@@ -81,6 +88,7 @@ DART set-up
 | Platforms and which side they're on | OSM platform areas | ODbL | Platform start and end, and the left or right side for every station stop |
 | Timetable | National Transport Authority GTFS (Irish Rail feed) | CC BY 4.0 | 789 DART trips, 32 stations, valid to Oct 2027 |
 | Terrain height | AWS Terrain Tiles (open data, satellite-derived) | Open | ~5 m grid near the line, coarser to the horizon |
+| Sky domes | Poly Haven HDRIs (six: partly cloudy day, overcast, misty morning, low sun, sunset, night) | CC0 | Real clouds, sky light and reflections |
 | Buildings, roads, walls, trees, parks, coastline | OSM | ODbL | ~63,000 buildings, 17,000 roads, 6,700 walls and fences, 93,000 trees within ~600 m of the line |
 
 All of this is downloaded and processed by scripts in `scripts/data/`. They can be re-run any time
