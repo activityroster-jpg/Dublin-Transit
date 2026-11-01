@@ -276,7 +276,13 @@ export async function buildWorld() {
       // Where detailed tiles exist, follow the carved near terrain (slightly below it) so the
       // backdrop never pokes through cuttings or the carved coast.
       const covered = [[-1, -1], [1, -1], [-1, 1], [1, 1]].every(([a, b]) => nearTiles.has(`${Math.floor((x + a * fcell) / NEAR.size)}_${Math.floor((z + b * fcell) / NEAR.size)}`));
-      if (covered) h = heightAt(x, z) - 1.5;
+      if (covered) {
+        // Under the detailed tiles the backdrop must sit below the lowest ground within half a cell:
+        // its 32 m grid would otherwise bridge across cuttings above the rails.
+        let lo = Infinity;
+        for (let a = -2; a <= 2; a++) for (let b = -2; b <= 2; b++) lo = Math.min(lo, heightAt(x + a * fcell * 0.25, z + b * fcell * 0.25));
+        h = lo - 2.5;
+      }
       farBuf.writeInt16LE(Math.max(-32768, Math.min(32767, Math.round(h * 10))), off); off += 2;
     }
   }

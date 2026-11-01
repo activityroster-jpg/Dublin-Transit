@@ -41,7 +41,8 @@ export function makeTrackMaterials(): TrackMaterials {
     // palisade in urban/industrial sections, granite rubble retaining and sea walls with a coping
     mesh: new THREE.MeshStandardMaterial({ map: weldMeshTexture(), alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.55, metalness: 0.3, color: 0x2e4a38 }),
     palisade: new THREE.MeshStandardMaterial({ map: palisadeTexture(), alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.5, metalness: 0.6, color: 0x9aa2a4 }),
-    granite: pbrMaterial('stonewall', 2, { color: 0xbab3a8, side: THREE.DoubleSide }),
+    // pale grey-beige granite as on the Killiney and Blackrock walls (the scan itself is dark)
+    granite: pbrMaterial('granite', 2, { color: 0xe6e2dc, side: THREE.DoubleSide }),
     coping: pbrMaterial('concrete', 1, { color: 0xa8a49c }),
   };
 }
