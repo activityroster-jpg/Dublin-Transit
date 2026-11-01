@@ -99,6 +99,16 @@
   "normal": true,
   "url": "https://ambientcg.com/a/Bricks076A"
  },
+ "rubble": {
+  "asset": "Bricks076A",
+  "note": "lineside retaining and sea walls (lifted to pale Dublin granite)",
+  "sizeM": [
+   2.0,
+   2.0
+  ],
+  "normal": true,
+  "url": "https://ambientcg.com/a/Bricks076A"
+ },
  "granite": {
   "asset": "Bricks108A",
   "note": "dressed granite (churches, stations)",

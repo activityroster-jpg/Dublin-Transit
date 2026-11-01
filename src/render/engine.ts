@@ -8,6 +8,7 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js';
 import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import type { QualitySettings } from '../core/env';
 import { sunPosition } from '../core/sun';
 import { clamp, smoothstep } from '../core/rand';
@@ -35,6 +36,21 @@ interface SkyDef { id: string; kind: string; sunAz: number; sunEl: number; sunSt
 interface LoadedSky { def: SkyDef; bg: THREE.Texture; env: THREE.Texture; horizon: THREE.Color }
 const SKY_BASE = `${import.meta.env.BASE_URL}assets/sky/`;
 
+/** Final grade, in display space: saturation, and a lift toward the haze colour. Under cloud, Dublin
+ *  reads pale and soft (set by eye against reference cab-ride footage); sun and night are left alone. */
+const GradeShader = {
+  uniforms: { tDiffuse: { value: null }, saturation: { value: 1 }, lift: { value: 0 }, haze: { value: new THREE.Color(0.86, 0.88, 0.9) } },
+  vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+  fragmentShader: `uniform sampler2D tDiffuse; uniform float saturation; uniform float lift; uniform vec3 haze; varying vec2 vUv;
+    void main() {
+      vec4 c = texture2D(tDiffuse, vUv);
+      float l = dot(c.rgb, vec3(0.2126, 0.7152, 0.0722));
+      vec3 g = mix(vec3(l), c.rgb, saturation);
+      g = g + (haze - g) * lift * (1.0 - l);
+      gl_FragColor = vec4(g, c.a);
+    }`,
+};
+
 export class Engine {
   readonly renderer: THREE.WebGLRenderer;
   readonly scene = new THREE.Scene();
@@ -46,6 +62,7 @@ export class Engine {
   private renderPass: RenderPass | null = null;
   private bloom: UnrealBloomPass | null = null;
   private gtao: GTAOPass | null = null;
+  private grade: ShaderPass | null = null;
   private pmrem: THREE.PMREMGenerator;
   readonly sunDir = new THREE.Vector3(0, 1, 0);
   /** 0 = full day, 1 = full night. Drives lamps and windows. */
@@ -170,6 +187,9 @@ export class Engine {
     this.bloom = new UnrealBloomPass(new THREE.Vector2(w, h), 0.12, 0.5, 0.95);
     this.composer.addPass(this.bloom);
     this.composer.addPass(new OutputPass());
+    this.grade = new ShaderPass(GradeShader);
+    this.composer.addPass(this.grade);
+    this.applyGrade();
     if (!this.q.msaa) this.composer.addPass(new SMAAPass());
   }
 
@@ -233,7 +253,16 @@ export class Engine {
     fog.density = 0.00015 + overcast * 0.0001 + (kind === 'mist' ? 0.00025 : 0);
     this.baseExposure = kind === 'night' ? 0.95 : kind === 'sunset' ? 0.7 : 0.62;
     if (this.bloom) this.bloom.strength = 0.1 + this.night * 0.25;
+    this.gradeCloud = (kind === 'overcast' || kind === 'mist' ? 1 : overcast * 0.6) * day * (1 - this.night);
+    this.applyGrade();
     this.applyLighting();
+  }
+
+  private gradeCloud = 0;
+  private applyGrade() {
+    if (!this.grade) return;
+    this.grade.uniforms.saturation.value = 1 - 0.2 * this.gradeCloud;
+    this.grade.uniforms.lift.value = 0.12 * this.gradeCloud;
   }
 
   private applyLighting() {

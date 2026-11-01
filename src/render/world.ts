@@ -221,7 +221,9 @@ export class World {
     const origin = path.point((s0 + s1) / 2);
     const p = new THREE.Vector3();
     const stationHere = (s: number) => path.data.stations.some((q) => s > q.platform.s0 - 5 && s < q.platform.s1 + 5);
-    const okGround = (x: number, z: number) => { const cls = this.hf.landClass(x, z); return cls !== 3 && cls !== 4 && cls !== 8 && cls !== 9; };
+    // not on sand, rock, ballast, paving or water
+    const okGround = (x: number, z: number) => { const cls = this.hf.landClass(x, z); return cls !== 3 && cls !== 4 && cls !== 5 && cls !== 8 && cls !== 9; };
+    const lsp = this.lineside?.paths[path.id], lsStep = this.lineside?.step ?? 25;
     /** Random lineside point; returns null if unsuitable. */
     const pick = (minLat: number, maxLat: number): THREE.Vector3 | null => {
       const s = s0 + r() * (s1 - s0);
@@ -229,7 +231,10 @@ export class World {
       if (st && st[2] !== 'cutting' && st[2] !== 'embankment') return null;
       if (stationHere(s)) return null;
       const side = r() < 0.5 ? -1 : 1;
-      path.offsetPoint(s, side * (minLat + r() * r() * (maxLat - minLat)), 0, p);
+      const lat = minLat + r() * r() * (maxLat - minLat);
+      // nothing grows in the six-foot or on the other line's ballast
+      if (lsp) { const adj = lsp.adj[Math.max(0, Math.min(lsp.adj.length - 1, Math.round(s / lsStep)))] / 10; if (adj && Math.sign(adj) === side && lat < Math.abs(adj) + 4.2) return null; }
+      path.offsetPoint(s, side * lat, 0, p);
       if (!okGround(p.x, p.z)) return null;
       const y = this.hf.height(p.x, p.z);
       if (y < 0.4) return null;
@@ -240,12 +245,12 @@ export class World {
     const n = Math.floor((s1 - s0) * 7 * dens);
     const pts = new Float32Array(n * 4);
     let k = 0;
-    for (let i = 0; i < n; i++) { const q = pick(3.6, 12.6); if (!q) continue; pts[k * 4] = q.x; pts[k * 4 + 1] = q.y; pts[k * 4 + 2] = q.z; pts[k * 4 + 3] = r(); k++; }
+    for (let i = 0; i < n; i++) { const q = pick(4.2, 12.6); if (!q) continue; pts[k * 4] = q.x; pts[k * 4 + 1] = q.y; pts[k * 4 + 2] = q.z; pts[k * 4 + 3] = r(); k++; }
     if (k) g.add(buildGrass(pts, k, origin));
     // scanned clumps: grass, nettles, weeds along the cess; bushes further out
     if (this.q.quality !== 'low') {
       const [grass, nettle, weed, shrub] = await Promise.all([loadModel('grass_medium_02'), loadModel('nettle_plant'), loadModel('weed_plant_02'), loadModel('shrub_02')]);
-      const sets: [typeof grass, number, number, number, number, number][] = [[grass, 220 * dens, 3.4, 9, 1.6, 2.6], [nettle, 70 * dens, 4, 10, 2.5, 4], [weed, 60 * dens, 3.6, 9, 2, 3.5], [shrub, 26 * dens, 5.5, 14, 0.7, 1.3]];
+      const sets: [typeof grass, number, number, number, number, number][] = [[grass, 220 * dens, 4.0, 9, 1.6, 2.6], [nettle, 70 * dens, 4.4, 10, 2.5, 4], [weed, 60 * dens, 4.2, 9, 2, 3.5], [shrub, 26 * dens, 5.5, 14, 0.7, 1.3]];
       for (const [model, count, minLat, maxLat, sc0, sc1] of sets) {
         const groups: THREE.Matrix4[][] = model.variants.map(() => []);
         for (let i = 0; i < count; i++) {

@@ -12,6 +12,7 @@ AmbientCG materials are CC0 1.0 (https://ambientcg.com). Poly Haven textures are
 - `pebbledash`: AmbientCG "Concrete037" (CC0), roughcast / pebble-dash render, 1.0 x 1.0 m, https://ambientcg.com/a/Concrete037
 - `render`: AmbientCG "Plaster003" (CC0), smooth render, 1.0 x 1.0 m, https://ambientcg.com/a/Plaster003
 - `stonewall`: AmbientCG "Bricks076A" (CC0), granite rubble walls, sea wall, tunnels, 2.0 x 2.0 m, https://ambientcg.com/a/Bricks076A
+- `rubble`: AmbientCG "Bricks076A" (CC0), lineside retaining and sea walls (lifted to pale Dublin granite), 2.0 x 2.0 m, https://ambientcg.com/a/Bricks076A
 - `granite`: AmbientCG "Bricks108A" (CC0), dressed granite (churches, stations), 1.0 x 1.0 m, https://ambientcg.com/a/Bricks108A
 - `roof`: AmbientCG "RoofingTiles013A" (CC0), Irish slate, 2.9 x 2.9 m, https://ambientcg.com/a/RoofingTiles013A
 - `flatroof`: AmbientCG "Gravel043" (CC0), flat roofs (felt and gravel), 1.6 x 1.6 m, https://ambientcg.com/a/Gravel043

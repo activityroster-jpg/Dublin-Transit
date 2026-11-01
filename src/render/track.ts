@@ -28,21 +28,22 @@ export function makeTrackMaterials(): TrackMaterials {
     ballast: pbrMaterial('ballast', 1.33, { color: 0xb4b0aa, normalStrength: 1.6, aoStrength: 1 }),
     masonry: pbrMaterial('stonewall', 2, { side: THREE.DoubleSide, color: 0xc8c2b8 }),
     steel: new THREE.MeshStandardMaterial({ side: THREE.DoubleSide, color: 0x3f5560, roughness: 0.6, metalness: 0.6 }),
-    mast: pbrMaterial('galvanised', 1, { color: 0xb8bec2, metal: true }),
+    // weathered hot-dip galvanising reads as dull pale grey under cloud, not polished metal
+    mast: pbrMaterial('galvanised', 1, { color: 0xc9cdcd, metalness: 0.3 }),
     wire: new THREE.MeshStandardMaterial({ color: 0x5a4632, roughness: 0.5, metalness: 0.8 }),
     tunnel: pbrMaterial('stonewall', 2, { color: 0x6f665c, side: THREE.DoubleSide }),
     concrete: pbrMaterial('concrete', 1, { color: 0xb4b0a8 }),
     trough: pbrMaterial('concrete', 1, { color: 0x9a978f }),
     chainlink: new THREE.MeshStandardMaterial({ map: chainlinkTexture(), alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.5, metalness: 0.6, color: 0xb8bcb8 }),
-    post: pbrMaterial('galvanised', 1, { color: 0x6f7672, metal: true }),
+    post: pbrMaterial('galvanised', 1, { color: 0x8f9694, metalness: 0.3 }),
     insulator: new THREE.MeshStandardMaterial({ color: 0x5a3b2a, roughness: 0.35 }),
     cabinet: pbrMaterial('galvanised', 1, { color: 0x7a8a7e, metal: true }),
     // boundary treatments seen along the line: dark green weld-mesh on open verges, tall grey
     // palisade in urban/industrial sections, granite rubble retaining and sea walls with a coping
-    mesh: new THREE.MeshStandardMaterial({ map: weldMeshTexture(), alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.55, metalness: 0.3, color: 0x2e4a38 }),
+    mesh: new THREE.MeshStandardMaterial({ map: weldMeshTexture(), alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.6, metalness: 0.1, color: 0x4f8060 }),
     palisade: new THREE.MeshStandardMaterial({ map: palisadeTexture(), alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.5, metalness: 0.6, color: 0x9aa2a4 }),
     // pale grey-beige granite as on the Killiney and Blackrock walls (the scan itself is dark)
-    granite: pbrMaterial('granite', 2, { color: 0xe6e2dc, side: THREE.DoubleSide }),
+    granite: pbrMaterial('rubble', 2, { color: 0xffffff, side: THREE.DoubleSide }),
     coping: pbrMaterial('concrete', 1, { color: 0xa8a49c }),
   };
 }
@@ -101,7 +102,7 @@ function ownedRanges(path: TrackPath, owner: Uint8Array, s0: number, s1: number)
 }
 
 /** Lineside classes from public/data/dart/lineside.json (see scripts/data/lineside.mjs). */
-export const LS = { OPEN: 0, BANK: 1, WALL: 2, SEA: 3, URBAN: 4, STATION: 5, STRUCT: 6, NONE: 7, CLIFF: 8 } as const;
+export const LS = { OPEN: 0, BANK: 1, WALL: 2, SEA: 3, URBAN: 4, STATION: 5, STRUCT: 6, NONE: 7, CLIFF: 8, SHORE: 9 } as const;
 export interface LinesidePath { L: string; R: string; hL: number[]; hR: number[]; adj: number[]; portal: string; noMast: string }
 export interface LinesideData { step: number; paths: Record<string, LinesidePath> }
 export interface TrackExtras { groundAt?: (x: number, z: number) => number; noFence?: [number, number][]; lineside?: LinesidePath; lsStep?: number }
@@ -242,13 +243,21 @@ function buildBoundaries(g: THREE.Group, path: TrackPath, a: number, b: number, 
     const j = Math.max(0, Math.min(ls.L.length - 1, Math.round(s / step)));
     return ((side < 0 ? ls.hL : ls.hR)[j] ?? 30) / 10;
   };
-  const blocked = (s: number) => (extras.noFence ?? []).some(([x0, x1]) => s > x0 && s < x1) || !!path.structure(s);
+  // Tunnels, viaducts and bridges carry their own walls; cuttings and embankments are exactly where
+  // boundaries matter, so they do not block.
+  const blocked = (s: number) => {
+    if ((extras.noFence ?? []).some(([x0, x1]) => s > x0 && s < x1)) return true;
+    const st = path.structure(s);
+    return !!st && st[2] !== 'cutting' && st[2] !== 'embankment';
+  };
   // [lateral, height or null for wall height, material, ground-following?]
   const style: Record<number, { lat: number; h: number | null; mat: THREE.Material; follow: boolean; thick: number }> = {
     [LS.OPEN]: { lat: 4.9, h: 1.9, mat: M.mesh, follow: true, thick: 0 },
     [LS.URBAN]: { lat: 4.6, h: 2.4, mat: M.palisade, follow: true, thick: 0 },
     [LS.WALL]: { lat: 4.1, h: null, mat: M.granite, follow: false, thick: 0.55 },
     [LS.SEA]: { lat: 4.0, h: 1.15, mat: M.granite, follow: false, thick: 0.6 },
+    // ground falling away to the shore (Killiney, Bray Head): a low post-and-wire fence, no wall
+    [LS.SHORE]: { lat: 4.6, h: 1.2, mat: M.mesh, follow: true, thick: 0 },
   };
   const p = new THREE.Vector3(), t = new THREE.Vector3(), q = new THREE.Quaternion(), sc = new THREE.Vector3(1, 1, 1);
   for (const side of [-1, 1]) {

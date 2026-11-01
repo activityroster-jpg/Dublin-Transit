@@ -31,6 +31,7 @@ SLOTS = {
     'pebbledash':     ('Concrete037', 1024, 1024, 'roughcast / pebble-dash render'),
     'render':         ('Plaster003', 1024, 1024, 'smooth render'),
     'stonewall':      ('Bricks076A', 1024, 1024, 'granite rubble walls, sea wall, tunnels'),
+    'rubble':         ('Bricks076A', 1024, 1024, 'lineside retaining and sea walls (lifted to pale Dublin granite)'),
     'granite':        ('Bricks108A', 1024, 1024, 'dressed granite (churches, stations)'),
     'roof':           ('RoofingTiles013A', 1024, 1024, 'Irish slate'),
     'flatroof':       ('Gravel043', 1024, 512, 'flat roofs (felt and gravel)'),
@@ -56,6 +57,9 @@ SLOTS = {
     'terrain_farm':   ('Grass007', 1024, 512, 'layer 7: fields'),
     'terrain_paved':  ('Concrete030', 1024, 512, 'layer 8: yards and car parks'),
 }
+
+# colour gain per slot (scan albedo is darker than the weathered granite on the line)
+GAIN = {'rubble': (1.42, 1.40, 1.36)}
 
 ROUGH_FLOOR = {
     'ballast': 0.6, 'cess': 0.6, 'concrete': 0.4, 'asphalt': 0.55, 'footway': 0.45, 'platform': 0.4,
@@ -95,7 +99,11 @@ def build(slot):
     rough = pick(z, 'Roughness')
     ao = pick(z, 'AmbientOcclusion')
     metal = pick(z, 'Metalness')
-    col.convert('RGB').resize((csize, csize), Image.LANCZOS).save(os.path.join(OUT, f'{slot}_diff.jpg'), quality=86, optimize=True, progressive=True)
+    col = col.convert('RGB').resize((csize, csize), Image.LANCZOS)
+    if slot in GAIN:
+        r, g, b = col.split(); gr, gg, gb = GAIN[slot]
+        col = Image.merge('RGB', (r.point(lambda v: min(255, int(v * gr))), g.point(lambda v: min(255, int(v * gg))), b.point(lambda v: min(255, int(v * gb)))))
+    col.save(os.path.join(OUT, f'{slot}_diff.jpg'), quality=86, optimize=True, progressive=True)
     if nor:
         nor.convert('RGB').resize((nsize, nsize), Image.LANCZOS).save(os.path.join(OUT, f'{slot}_nor_gl.jpg'), quality=90, optimize=True)
     size = (nsize, nsize)

@@ -114,16 +114,22 @@ export async function buildWorld() {
   // Coastline (OSM: land on the left of the way, sea on the right). A jump-flood distance
   // transform on a 32 m grid gives every point its nearest coast sample, so the sea side is
   // known at any distance (SRTM is garbage over water: Killiney Bay reads 30 m).
-  const coastSeeds = []; // [x, z, dirx, dirz]
+  const coastSeeds = []; // [x, z, dirx, dirz, segment]
+  const coastSegs = [], segStart = new Map(), segEnd = new Map();
   for (const w of osm.ways.values()) {
     if (w.tags?.natural !== 'coastline') continue;
     for (let i = 0; i < w.nodes.length - 1; i++) {
       const a = P(w.nodes[i]), b = P(w.nodes[i + 1]); if (!a || !b) continue;
       const L = Math.hypot(b[0] - a[0], b[1] - a[1]); if (L < 0.01) continue;
       const dx = (b[0] - a[0]) / L, dz = (b[1] - a[1]) / L;
-      for (let t = 0; t < L; t += 12) coastSeeds.push([a[0] + dx * t, a[1] + dz * t, dx, dz]);
+      const k = coastSegs.length;
+      coastSegs.push({ ax: a[0], az: a[1], bx: b[0], bz: b[1], dx, dz, L, na: w.nodes[i], nb: w.nodes[i + 1], prev: -1, next: -1 });
+      segStart.set(w.nodes[i], k); segEnd.set(w.nodes[i + 1], k);
+      for (let t = 0; t < L; t += 12) coastSeeds.push([a[0] + dx * t, a[1] + dz * t, dx, dz, k]);
     }
   }
+  // coastline ways join end to start, so corners can be resolved across ways
+  for (const sg of coastSegs) { sg.prev = segEnd.get(sg.na) ?? -1; sg.next = segStart.get(sg.nb) ?? -1; }
   const CG = 32;
   const gx0 = Math.floor((bx0 - 7000) / CG), gz0 = Math.floor((bz0 - 7000) / CG), gw = Math.ceil((bx1 - bx0 + 14000) / CG), gh = Math.ceil((bz1 - bz0 + 14000) / CG);
   const nearest = new Int32Array(gw * gh).fill(-1);
@@ -151,15 +157,41 @@ export async function buildWorld() {
   }
   console.log(`coast: ${coastSeeds.length} samples, grid ${gw}x${gh}`);
   /** { d: distance to the coast, sea: boolean } or null far from any coast. */
+  // The grid only says which stretch of coast is near. The side is then taken from the exact
+  // nearest point on the coastline segments; when that point is a corner, the bisector of the two
+  // segments decides. (Taking the side from the nearest sample alone flips whole 32 m cells off
+  // sharp headlands: Bray Head grew flat-topped blocks of land out in the sea.)
   const coastInfo = (x, z) => {
     const cx = Math.floor(x / CG) - gx0, cz = Math.floor(z / CG) - gz0;
     if (cx < 0 || cz < 0 || cx >= gw || cz >= gh) return null;
     const i = nearest[cz * gw + cx];
     if (i < 0) return null;
-    const sd = coastSeeds[i];
-    const rx = x - sd[0], rz = z - sd[1];
-    const cross = sd[2] * rz - sd[3] * rx;
-    return { d: Math.hypot(rx, rz), sea: cross > 0 };
+    const cand = new Set();
+    const addChain = (k0) => {
+      for (let k = k0, n = 0; k >= 0 && n < 4; k = coastSegs[k].prev, n++) cand.add(k);
+      for (let k = k0, n = 0; k >= 0 && n < 4; k = coastSegs[k].next, n++) cand.add(k);
+    };
+    addChain(coastSeeds[i][4]);
+    for (let j = -1; j <= 1; j++) for (let q = -1; q <= 1; q++) {
+      if ((!j && !q) || cx + q < 0 || cz + j < 0 || cx + q >= gw || cz + j >= gh) continue;
+      const o = nearest[(cz + j) * gw + cx + q]; if (o >= 0) cand.add(coastSeeds[o][4]);
+    }
+    let bd = Infinity, best = null, bt = 0;
+    for (const k of cand) {
+      const sg = coastSegs[k];
+      const t = Math.max(0, Math.min(1, ((x - sg.ax) * sg.dx + (z - sg.az) * sg.dz) / sg.L));
+      const d = (x - sg.ax - (sg.bx - sg.ax) * t) ** 2 + (z - sg.az - (sg.bz - sg.az) * t) ** 2;
+      if (d < bd) { bd = d; best = sg; bt = t; }
+    }
+    let cross;
+    if (bt > 0 && bt < 1) cross = best.dx * (z - best.az) - best.dz * (x - best.ax);
+    else {
+      const vx = bt <= 0 ? best.ax : best.bx, vz = bt <= 0 ? best.az : best.bz;
+      const o = coastSegs[bt <= 0 ? best.prev : best.next];
+      const dx = best.dx + (o ? o.dx : 0), dz = best.dz + (o ? o.dz : 0);
+      cross = dx * (z - vz) - dz * (x - vx);
+    }
+    return { d: Math.sqrt(bd), sea: cross > 0 };
   };
 
   // What is beside each track (sea wall, retaining wall, bank, open, urban...), from data.
@@ -223,7 +255,9 @@ export async function buildWorld() {
         if (ti.kind === 'bridge' || ti.kind === 'viaduct') {
           if (ti.d < 14) h = Math.min(h, ti.y - 5.5);
         } else if (ti.kind === 'tunnel') {
-          h = Math.max(h, ti.y + 7.5);
+          // cover over the bore, falling away 1:1 to the natural ground (a flat 70 m-wide shelf
+          // here used to stand out over the sea at Bray Head)
+          h = Math.max(h, ti.y + 7.5 - Math.max(0, ti.d - 5));
         } else {
           const shelf = platformShelf(ti);
           const core = shelf ? Math.max(2.7, shelf) : 2.7;
@@ -396,7 +430,7 @@ export async function buildWorld() {
   // walls (the overgrown look of the Dalkey and Killiney cuttings), a scatter on open verges,
   // sparse gorse on cliffs, little in urban sections, none on the sea side.
   // [chance per 5 m sample, min lateral, max lateral, tree share]
-  const VEG = { [LS.OPEN]: [1.0, 6.5, 16, 0.3], [LS.BANK]: [2.6, 5.2, 22, 0.35], [LS.WALL]: [1.6, 8.5, 24, 0.55], [LS.SEA]: [0, 0, 0, 0], [LS.URBAN]: [0.2, 6, 12, 0.2], [LS.CLIFF]: [0.7, 6, 30, 0.05] };
+  const VEG = { [LS.OPEN]: [1.0, 6.5, 16, 0.3], [LS.BANK]: [2.6, 5.2, 22, 0.35], [LS.WALL]: [1.6, 8.5, 24, 0.55], [LS.SEA]: [0, 0, 0, 0], [LS.URBAN]: [0.2, 6, 12, 0.2], [LS.CLIFF]: [0.7, 6, 30, 0.05], [LS.SHORE]: [0.7, 6, 16, 0.0] };
   let nv = 0;
   for (const p of net.paths) {
     const lp = lineside.paths[p.id];

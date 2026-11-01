@@ -17,6 +17,7 @@ export const LS = {
   STRUCT: 6,  // tunnel, viaduct or bridge deck: handled by the structure builder
   NONE: 7,    // the other running line is on this side: it draws its own boundary
   CLIFF: 8,   // very high, steep natural ground (Bray Head): bare rock and gorse, no fence
+  SHORE: 9,   // ground falling away to the shore beyond (Killiney beach, Bray Head ledge): low fence, scrub
 };
 
 /**
@@ -108,11 +109,14 @@ export function classifyLineside(net, natural, coastInfo, buildings) {
         else {
           const at = (lat) => { const px = x + rx * side * lat, pz = z + rz * side * lat; return { h: natural(px, pz) - y, c: coastInfo(px, pz) }; };
           const a7 = at(7), a12 = at(12), a20 = at(20), a35 = at(35), a50 = at(50);
-          const seaNear = (a12.c && a12.c.sea) || (a20.c && a20.c.sea && a20.c.d > 3);
+          // water within ~30 m with nothing but a promenade between (Seapoint, Monkstown): the railway
+          // boundary is still the low granite sea wall
+          const seaNear = (a12.c && a12.c.sea) || (a20.c && a20.c.sea) || (a35.c && a35.c.sea && a35.c.d < 10 && a20.h > -2.5);
           // a ledge or embankment falling to the shore (Bray Head, Killiney beach): sea side too
           const seaBelow = a12.h < -1 && ((a35.c && a35.c.sea) || (a50.c && a50.c.sea));
           const remote = builtUp(x + rx * side * 40, z + rz * side * 40, 60).frac < 0.02;
-          if (seaNear || seaBelow) code = LS.SEA;
+          if (seaNear) code = LS.SEA;
+          else if (seaBelow) code = LS.SHORE;
           // bare rock only where the ground is very high and nobody lives (Bray Head); elsewhere a
           // steep rise next to the cess is a masonry retaining wall with the bank above it (Killiney, Dalkey)
           else if (a20.h > 9 && a35.h > 16 && remote) code = LS.CLIFF;
