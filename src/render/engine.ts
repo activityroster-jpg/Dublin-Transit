@@ -55,6 +55,7 @@ export class Engine {
   private sunBase = 3;
   private hemiBase = 0.3;
   private envBase = 0.6;
+  private bgBase = 1;
   private skyDefs: SkyDef[] = [];
   private skies = new Map<string, Promise<LoadedSky>>();
   private currentSky: LoadedSky | null = null;
@@ -221,12 +222,16 @@ export class Engine {
     this.hemiBase = 0.1 + 0.15 * day;
     this.hemi.color.setRGB(0.65 + 0.1 * day, 0.75 + 0.1 * day, 1.0);
     this.hemi.groundColor.setRGB(0.28 * day + 0.08, 0.3 * day + 0.08, 0.22 * day + 0.1);
-    this.envBase = sky ? (kind === 'night' ? 0.9 : 0.75) : 0.6;
+    // The night sky photo is moonlit and bright; real Dublin at night is lit by lamps, not sky.
+    // Scale the sky, sky-light and fog down with darkness so lamps, windows and headlights dominate.
+    const dark = this.night;
+    this.bgBase = 1 - 0.9 * dark;
+    this.envBase = (sky ? 0.75 : 0.6) * (1 - 0.85 * dark);
     const fog = this.scene.fog as THREE.FogExp2;
-    if (sky) fog.color.copy(sky.horizon);
+    if (sky) fog.color.copy(sky.horizon).multiplyScalar(1 - 0.88 * dark);
     else fog.color.copy(new THREE.Color(0.045, 0.055, 0.085).lerp(new THREE.Color(0.72, 0.79, 0.86), day));
     fog.density = 0.00015 + overcast * 0.0001 + (kind === 'mist' ? 0.00025 : 0);
-    this.baseExposure = kind === 'night' ? 1.3 : kind === 'sunset' ? 0.7 : 0.62;
+    this.baseExposure = kind === 'night' ? 0.95 : kind === 'sunset' ? 0.7 : 0.62;
     if (this.bloom) this.bloom.strength = 0.1 + this.night * 0.25;
     this.applyLighting();
   }
@@ -236,7 +241,7 @@ export class Engine {
     this.sun.intensity = this.sunBase * (1 - f);
     this.hemi.intensity = this.hemiBase * (1 - 0.9 * f);
     this.scene.environmentIntensity = this.envBase * (1 - 0.9 * f);
-    this.scene.backgroundIntensity = 1;
+    this.scene.backgroundIntensity = this.bgBase;
     this.renderer.toneMappingExposure = this.baseExposure * (1 + f * 1.2);
   }
 

@@ -57,6 +57,14 @@ SLOTS = {
     'terrain_paved':  ('Concrete030', 1024, 512, 'layer 8: yards and car parks'),
 }
 
+ROUGH_FLOOR = {
+    'ballast': 0.6, 'cess': 0.6, 'concrete': 0.4, 'asphalt': 0.55, 'footway': 0.45, 'platform': 0.4,
+    'platformwall': 0.4, 'brick': 0.45, 'pebbledash': 0.7, 'render': 0.55, 'stonewall': 0.55,
+    'granite': 0.4, 'flatroof': 0.7, 'roof': 0.25, 'bark': 0.7, 'rustmetal': 0.5,
+    'terrain_grass': 0.7, 'terrain_urban': 0.7, 'terrain_forest': 0.7, 'terrain_sand': 0.55,
+    'terrain_rock': 0.55, 'terrain_gravel': 0.6, 'terrain_park': 0.7, 'terrain_farm': 0.7, 'terrain_paved': 0.5,
+}
+
 def get(url):
     with urllib.request.urlopen(urllib.request.Request(url, headers=UA), timeout=600) as r:
         return r.read()
@@ -93,6 +101,11 @@ def build(slot):
     size = (nsize, nsize)
     R = (ao.convert('L') if ao else Image.new('L', size, 255)).resize(size, Image.LANCZOS)
     G = (rough.convert('L') if rough else Image.new('L', size, 200)).resize(size, Image.LANCZOS)
+    # Scans are often shot damp or under studio light; dry outdoor surfaces in low sun glint unless
+    # the roughness is lifted. Remap r -> lo + r * (1 - lo) per slot, keeping the variation.
+    lo = ROUGH_FLOOR.get(slot, 0.0)
+    if lo:
+        G = G.point(lambda v: int(round(lo * 255 + v * (1 - lo))))
     B = (metal.convert('L') if metal else Image.new('L', size, 0)).resize(size, Image.LANCZOS)
     Image.merge('RGB', (R, G, B)).save(os.path.join(OUT, f'{slot}_arm.jpg'), quality=88, optimize=True)
     a = info(asset)
