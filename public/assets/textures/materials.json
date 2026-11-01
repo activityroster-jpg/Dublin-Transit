@@ -190,14 +190,14 @@
   "url": "https://ambientcg.com/a/Rubber004"
  },
  "plastic": {
-  "asset": "Plastic011",
-  "note": "moulded cab panels",
+  "asset": "Plastic018A",
+  "note": "moulded cab panels (light grey)",
   "sizeM": [
    1.0,
    1.0
   ],
   "normal": true,
-  "url": "https://ambientcg.com/a/Plastic011"
+  "url": "https://ambientcg.com/a/Plastic018A"
  },
  "fabric": {
   "asset": "Fabric030",

@@ -21,7 +21,7 @@ AmbientCG materials are CC0 1.0 (https://ambientcg.com). Poly Haven textures are
 - `platformwall`: AmbientCG "Concrete044A" (CC0), platform faces and copings, 1.0 x 1.0 m, https://ambientcg.com/a/Concrete044A
 - `bark`: AmbientCG "Bark012" (CC0), tree trunks, 1.0 x 1.0 m, https://ambientcg.com/a/Bark012
 - `rubber`: AmbientCG "Rubber004" (CC0), cab floor and desk mat, 0.75 x 0.75 m, https://ambientcg.com/a/Rubber004
-- `plastic`: AmbientCG "Plastic011" (CC0), moulded cab panels, 1.0 x 1.0 m, https://ambientcg.com/a/Plastic011
+- `plastic`: AmbientCG "Plastic018A" (CC0), moulded cab panels (light grey), 1.0 x 1.0 m, https://ambientcg.com/a/Plastic018A
 - `fabric`: AmbientCG "Fabric030" (CC0), driver seat cloth, 1.0 x 1.0 m, https://ambientcg.com/a/Fabric030
 - `terrain_grass`: AmbientCG "Grass004" (CC0), layer 0: rough lineside grass, 1.4 x 1.4 m, https://ambientcg.com/a/Grass004
 - `terrain_urban`: AmbientCG "Grass003" (CC0), layer 1: gardens, 1.4 x 1.4 m, https://ambientcg.com/a/Grass003

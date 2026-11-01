@@ -46,12 +46,12 @@ export class Cab {
   constructor() {
     const g = this.group;
     // scanned CC0 surfaces (AmbientCG): moulded plastic lining, brushed metal desk, rubber mats, seat cloth
-    const shell = pbrMaterial('plastic', 2, { color: 0xe6e2d6, normalStrength: 0.6 });
-    const darkPanel = pbrMaterial('plastic', 2, { color: 0x4a5054, normalStrength: 0.6 });
-    const desk = pbrMaterial('metal', 1, { color: 0x8a9094, metal: true, normalStrength: 0.5 });
-    const deskTop = pbrMaterial('rubber', 2, { color: 0x5a5e62 });
-    const floor = pbrMaterial('rubber', 3, { color: 0x45484b });
-    const seatCloth = pbrMaterial('fabric', 3, { color: 0x3a4250 });
+    const shell = pbrMaterial('plastic', 2, { color: 0xfffbef, normalStrength: 0.6 });
+    const darkPanel = pbrMaterial('plastic', 2, { color: 0x6c7276, normalStrength: 0.6 });
+    const desk = pbrMaterial('metal', 1, { color: 0xb4b9bc, normalStrength: 0.5, metalness: 0.35 });
+    const deskTop = pbrMaterial('rubber', 2, { color: 0xb0b4b8 });
+    const floor = pbrMaterial('rubber', 3, { color: 0x9a9ea2 });
+    const seatCloth = pbrMaterial('fabric', 3, { color: 0x6a7890 });
     const glass = new THREE.MeshPhysicalMaterial({ color: 0xffffff, roughness: 0.02, metalness: 0, transmission: 0, transparent: true, opacity: 0.08, side: THREE.DoubleSide, depthWrite: false });
     /** Box at screen-x sx. */
     const P = (m: THREE.Material, sx_: number, sy: number, sz: number, sx: number, y: number, z: number, shadow = true) => {

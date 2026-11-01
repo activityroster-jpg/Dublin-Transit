@@ -135,5 +135,5 @@ export function placement(x: number, y: number, z: number, yaw: number, scale: n
 
 /** Preloads the models the world needs so builders don't stall. */
 export function preloadWorldModels(): Promise<Model[]> {
-  return Promise.all(['shrub_02', 'shrub_03', 'shrub_04', 'grass_medium_02', 'weed_plant_02', 'nettle_plant', 'street_lamp_01', 'modular_street_seating', 'painted_wooden_bench', 'metal_trash_can', 'rock_moss_set_01'].map(loadModel));
+  return Promise.all(['shrub_02', 'shrub_03', 'shrub_04', 'grass_medium_02', 'weed_plant_02', 'nettle_plant', 'street_lamp_01', 'painted_wooden_bench', 'metal_trash_can', 'rock_moss_set_01'].map(loadModel));
 }

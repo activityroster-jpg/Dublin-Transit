@@ -43,7 +43,7 @@ SLOTS = {
     'bark':           ('Bark012', 1024, 512, 'tree trunks'),
     # cab
     'rubber':         ('Rubber004', 512, 512, 'cab floor and desk mat'),
-    'plastic':        ('Plastic011', 512, 512, 'moulded cab panels'),
+    'plastic':        ('Plastic018A', 512, 512, 'moulded cab panels (light grey)'),
     'fabric':         ('Fabric030', 512, 512, 'driver seat cloth'),
     # terrain layers (array texture), in layer order 0..8
     'terrain_grass':  ('Grass004', 1024, 512, 'layer 0: rough lineside grass'),
