@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import type { SceneryTile } from '../dart/data';
 import { hash2 } from '../core/rand';
-import { tex } from './textures';
+import { pbrMaterial, tex } from './textures';
 
 type B = SceneryTile['b'][number];
 
@@ -28,23 +28,29 @@ export const buildingUniforms = { uNight: { value: 0 } };
 
 function wallMaterial(): THREE.MeshStandardMaterial {
   if (wallMat) return wallMat;
-  const m = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, metalness: 0 });
+  // normalMap is set so three builds the tangent frame; the actual normal is chosen per wall type below
+  const m = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, metalness: 0, normalMap: tex('brick_nor_gl', 1, false), normalScale: new THREE.Vector2(1.2, 1.2) });
   const dash = tex('pebbledash_diff', 1), brick = tex('brick_diff', 1), conc = tex('concrete_diff', 1), stone = tex('stonewall_diff', 1);
+  const nDash = tex('pebbledash_nor_gl', 1, false), nBrick = tex('brick_nor_gl', 1, false), nConc = tex('concrete_nor_gl', 1, false), nStone = tex('stonewall_nor_gl', 1, false);
   m.onBeforeCompile = (sh) => {
-    Object.assign(sh.uniforms, { tDash: { value: dash }, tBrick: { value: brick }, tConc: { value: conc }, tStone: { value: stone }, uNight: buildingUniforms.uNight });
+    Object.assign(sh.uniforms, { tDash: { value: dash }, tBrick: { value: brick }, tConc: { value: conc }, tStone: { value: stone }, nDash: { value: nDash }, nBrick: { value: nBrick }, nConc: { value: nConc }, nStone: { value: nStone }, uNight: buildingUniforms.uNight });
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', '#include <common>\nattribute vec4 aP; attribute vec2 aUV; varying vec4 vP; varying vec2 vUV2;')
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvP = aP; vUV2 = aUV;');
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', `#include <common>
-uniform sampler2D tDash, tBrick, tConc, tStone; uniform float uNight;
+uniform sampler2D tDash, tBrick, tConc, tStone, nDash, nBrick, nConc, nStone; uniform float uNight;
 varying vec4 vP; varying vec2 vUV2;
 float bh(vec2 p){ return fract(sin(dot(p, vec2(12.9898,78.233))) * 43758.5453); }`)
       .replace('#include <map_fragment>', `
   // vP: x = kind, y = floor height, z = window spacing, w = wall texture id + seed*10
   float texId = mod(vP.w, 10.0); float seed = floor(vP.w / 10.0);
   vec2 wuv = vUV2;
-  vec3 wt = texId < 0.5 ? texture2D(tDash, wuv * 0.5).rgb * 1.25 : texId < 1.5 ? texture2D(tBrick, wuv * vec2(0.5, 0.5)).rgb * 1.6 : texId < 2.5 ? texture2D(tConc, wuv * 0.3).rgb * 1.3 : texId < 3.5 ? vec3(0.85 + 0.15 * step(0.5, fract(wuv.x * 2.5))) : texture2D(tStone, wuv * 0.4).rgb * 1.4;
+  // AmbientCG tiles: pebble-dash and brick 1 m, concrete 1 m (shown at 2 m), granite rubble 2 m
+  vec2 uvT = texId < 1.5 ? wuv : wuv * 0.5;
+  vec3 wt = texId < 0.5 ? texture2D(tDash, uvT).rgb * 1.15 : texId < 1.5 ? texture2D(tBrick, uvT).rgb * 1.2 : texId < 2.5 ? texture2D(tConc, uvT).rgb * 1.2 : texId < 3.5 ? vec3(0.85 + 0.15 * step(0.5, fract(wuv.x * 2.5))) : texture2D(tStone, uvT).rgb * 1.25;
+  vec3 wallN = texId < 0.5 ? texture2D(nDash, uvT).xyz : texId < 1.5 ? texture2D(nBrick, uvT).xyz : texId < 2.5 ? texture2D(nConc, uvT).xyz : texId < 3.5 ? vec3(0.5, 0.5 + 0.08 * step(0.92, fract(wuv.x * 2.5)), 1.0) : texture2D(nStone, uvT).xyz;
+  wallN = wallN * 2.0 - 1.0;
   diffuseColor.rgb *= texId < 1.5 && texId > 0.5 ? wt * vec3(1.0) : wt;
   float isWin = 0.0; float lit = 0.0;
   if (vP.z > 0.5 && vUV2.y > 0.6) {
@@ -88,19 +94,22 @@ float bh(vec2 p){ return fract(sin(dot(p, vec2(12.9898,78.233))) * 43758.5453); 
   // weathering: darker plinth at street level, grime streaks under windows
   shade *= 0.72 + 0.28 * smoothstep(0.0, 0.9, vUV2.y);
   shade *= 0.93 + 0.07 * bh(vec2(floor(vUV2.x * 2.0), seed));
-  diffuseColor.rgb *= shade;`)
+  diffuseColor.rgb *= shade;
+  if (isWin > 0.5) wallN = vec3(0.0, 0.0, 1.0);`)
+      .replace('#include <normal_fragment_maps>', THREE.ShaderChunk.normal_fragment_maps.split('texture2D( normalMap, vNormalMapUv ).xyz * 2.0 - 1.0').join('wallN'))
       .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\n  if (isWin > 0.5) roughnessFactor = 0.08;')
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n  if (isWin > 0.5) totalEmissiveRadiance += vec3(1.0, 0.78, 0.45) * lit * uNight * 0.55;');
   };
-  m.customProgramCacheKey = () => 'bld-wall-v4';
+  m.customProgramCacheKey = () => 'bld-wall-v5';
   wallMat = m;
   return m;
 }
 function roofMaterials() {
   if (roofMats) return roofMats;
   roofMats = {
-    tiles: new THREE.MeshStandardMaterial({ map: tex('roof_diff', 1), normalMap: tex('roof_nor_gl', 1, false), roughness: 0.85, vertexColors: true }),
-    flat: new THREE.MeshStandardMaterial({ side: THREE.DoubleSide, color: 0x77736c, roughness: 0.95, map: tex('concrete_diff', 1) }),
+    // roof uv = 0.5/m; RoofingTiles013A is a 2.9 m tile; vertex colours tint it, so lift the dark slate
+    tiles: pbrMaterial('roof', 0.69, { vertexColors: true, color: 0xffffff, normalStrength: 1.3, emissive: 0x000000 }),
+    flat: pbrMaterial('flatroof', 3.1, { side: THREE.DoubleSide, color: 0x9a968e }),
   };
   return roofMats;
 }
@@ -203,7 +212,7 @@ export function buildBuildings(list: B[], origin: THREE.Vector3): THREE.Group {
       const ridge = hip ? Math.max(0.2, hl - hw * 0.9) : hl;
       const e1 = P(-hl, -hw, y1), e2 = P(hl, -hw, y1), e3 = P(hl, hw, y1), e4 = P(-hl, hw, y1);
       const r1 = P(-ridge, 0, y1 + rh), r2 = P(ridge, 0, y1 + rh);
-      const rcolor = new THREE.Color(rcol ?? (hsh > 0.7 ? '#6b4a3c' : hsh > 0.35 ? '#4a4d52' : '#5d5f63'));
+      const rcolor = new THREE.Color(rcol ?? (hsh > 0.8 ? '#e0a48a' : hsh > 0.4 ? '#c9cbd0' : '#e2e2e6')); // tints over the dark slate scan
       try { rcolor.convertSRGBToLinear(); } catch { /* */ }
       const tri = (a: number[], b2: number[], c: number[]) => {
         const v1 = new THREE.Vector3(b2[0] - a[0], b2[1] - a[1], b2[2] - a[2]), v2 = new THREE.Vector3(c[0] - a[0], c[1] - a[1], c[2] - a[2]);
@@ -254,6 +263,7 @@ export function buildBuildings(list: B[], origin: THREE.Vector3): THREE.Group {
     geo.setAttribute('color', new THREE.Float32BufferAttribute(wc, 3));
     geo.setAttribute('aP', new THREE.Float32BufferAttribute(wP, 4));
     geo.setAttribute('aUV', new THREE.Float32BufferAttribute(wUV, 2));
+    geo.setAttribute('uv', new THREE.Float32BufferAttribute(wUV, 2)); // drives the tangent frame for wall normals
     const m = new THREE.Mesh(geo, wallMaterial()); m.castShadow = true; m.receiveShadow = true; g.add(m);
   }
   const rm = roofMaterials();

@@ -1,7 +1,7 @@
 // Trees, bushes and grass: card-based crowns with wind sway, instanced per scenery tile.
 import * as THREE from 'three';
 import { rng } from '../core/rand';
-import { grassTexture, leafTexture, tex } from './textures';
+import { grassTexture, leafTexture, pbrMaterial } from './textures';
 
 export const windUniforms = { uTime: { value: 0 } };
 
@@ -61,7 +61,8 @@ function trunk(h: number, r0: number): THREE.BufferGeometry {
 
 export function initVegetation(grassDensity: number) {
   if (kinds) return;
-  barkMat = new THREE.MeshStandardMaterial({ map: tex('bark_diff', 1), roughness: 1 });
+  barkMat = pbrMaterial('bark', 1, { color: 0x9a948a });
+  for (const t of [(barkMat as THREE.MeshStandardMaterial).map, (barkMat as THREE.MeshStandardMaterial).normalMap, (barkMat as THREE.MeshStandardMaterial).roughnessMap]) t?.repeat.set(2, 4);
   const leafA = swayMaterial(leafTexture(11, 95), 0.012);
   const leafB = swayMaterial(leafTexture(23, 80), 0.014);
   const leafC = swayMaterial(leafTexture(37, 105), 0.02);

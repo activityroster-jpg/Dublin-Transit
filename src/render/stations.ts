@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import type { TrackPath } from '../dart/path';
 import type { StationData } from '../dart/data';
-import { cisTexture, fenceTexture, stationSignTexture, tactileTexture, tex, textTexture } from './textures';
+import { cisTexture, fenceTexture, pbrMaterial, stationSignTexture, tactileTexture, textTexture } from './textures';
 import { instance, loadModel, placement } from './models';
 
 export const PLATFORM_EDGE = 1.65;
@@ -15,14 +15,15 @@ function mats() {
   const lampHead = new THREE.MeshStandardMaterial({ color: 0xdddddd, emissive: new THREE.Color(1, 0.92, 0.8), emissiveIntensity: 0 });
   stationLampMats.push(lampHead);
   M = {
-    body: new THREE.MeshStandardMaterial({ map: tex('concrete_diff', 1), normalMap: tex('concrete_nor_gl', 1, false), roughness: 0.9, color: 0xa9a59e, side: THREE.DoubleSide }),
-    top: new THREE.MeshStandardMaterial({ map: tex('paving_diff', 1), normalMap: tex('paving_nor_gl', 1, false), roughness: 0.85, color: 0xc9c4ba }),
-    coping: new THREE.MeshStandardMaterial({ color: 0xe8e4dc, roughness: 0.7 }),
+    body: pbrMaterial('platformwall', 3.3, { color: 0xb2ada4, side: THREE.DoubleSide }),
+    top: pbrMaterial('platform', 2, { color: 0xd2cdc4 }),
+    coping: pbrMaterial('platformwall', 1, { color: 0xf0ece4 }),
     yellow: new THREE.MeshStandardMaterial({ color: 0xf2c200, roughness: 0.6 }),
     steel: new THREE.MeshStandardMaterial({ color: 0x2d4b3e, roughness: 0.5, metalness: 0.6 }),
     glass: new THREE.MeshStandardMaterial({ color: 0xbfd8e0, roughness: 0.05, metalness: 0.1, transparent: true, opacity: 0.25, side: THREE.DoubleSide, depthWrite: false }),
-    roof: new THREE.MeshStandardMaterial({ color: 0x4a5552, roughness: 0.55, metalness: 0.5, side: THREE.DoubleSide, map: tex('metal_diff', 1), normalMap: tex('metal_nor_gl', 1, false) }),
+    roof: pbrMaterial('galvanised', 0.5, { color: 0x6c7774, side: THREE.DoubleSide, metal: true }),
     wood: new THREE.MeshStandardMaterial({ color: 0x7a5a3c, roughness: 0.8 }),
+    granite: pbrMaterial('granite', 1, { color: 0xd8d4cc }),
     fence: new THREE.MeshStandardMaterial({ map: fenceTexture(), alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.6, metalness: 0.4 }),
     lampHead,
     tactile: new THREE.MeshStandardMaterial({ map: tactileTexture(), roughness: 0.9 }),

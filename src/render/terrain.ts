@@ -77,16 +77,18 @@ export class HeightField {
 }
 
 /** Shared material for near terrain: blends texture layers with per-vertex weights. */
-export function makeTerrainMaterial(layers: THREE.DataArrayTexture, normal: THREE.Texture): THREE.MeshStandardMaterial {
-  const m = new THREE.MeshStandardMaterial({ roughness: 0.95, metalness: 0, normalMap: normal, normalScale: new THREE.Vector2(0.6, 0.6) });
+export function makeTerrainMaterial(layers: THREE.DataArrayTexture, normal: THREE.Texture, normals?: THREE.DataArrayTexture): THREE.MeshStandardMaterial {
+  const m = new THREE.MeshStandardMaterial({ roughness: 0.95, metalness: 0, normalMap: normal, normalScale: new THREE.Vector2(0.9, 0.9) });
   m.onBeforeCompile = (sh) => {
     sh.uniforms.uLayers = { value: layers };
+    sh.uniforms.uNormals = { value: normals ?? layers };
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', '#include <common>\nattribute vec4 aW0; attribute vec4 aW1; attribute float aW2;\nvarying vec4 vW0; varying vec4 vW1; varying float vW2; varying vec3 vWPos; varying vec3 vNormalWorld;')
       .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvW0 = aW0; vW1 = aW1; vW2 = aW2; vWPos = (modelMatrix * vec4(transformed, 1.0)).xyz; vNormalWorld = normalize(mat3(modelMatrix) * normal);');
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', `#include <common>
 uniform highp sampler2DArray uLayers;
+uniform highp sampler2DArray uNormals;
 varying vec4 vW0; varying vec4 vW1; varying float vW2; varying vec3 vWPos; varying vec3 vNormalWorld;
 float tHash(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7))) * 43758.5453); }
 float tNoise(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.-2.*f);
@@ -97,11 +99,13 @@ vec3 layerCol(float L, vec2 uv){
   vec3 b = texture(uLayers, vec3(uv * 0.043 + 0.37, L)).rgb;
   return mix(a, b, 0.35);
 }`)
+      .replace('#include <normal_fragment_maps>', THREE.ShaderChunk.normal_fragment_maps.split('texture2D( normalMap, vNormalMapUv ).xyz * 2.0 - 1.0').join('terrN'))
       .replace('#include <map_fragment>', `
   vec2 tuv = vWPos.xz;
   vec3 col = vec3(0.0); float wsum = 0.0;
   float ws[9]; ws[0]=vW0.x; ws[1]=vW0.y; ws[2]=vW0.z; ws[3]=vW0.w; ws[4]=vW1.x; ws[5]=vW1.y; ws[6]=vW1.z; ws[7]=vW1.w; ws[8]=vW2;
-  for (int i = 0; i < ${LAYERS}; i++) { if (ws[i] > 0.02) { vec3 lc = layerCol(float(i), tuv); if (i == 5) lc *= vec3(0.78, 0.75, 0.72); if (i == 4) lc *= 0.8; if (i == 2) lc *= vec3(0.42, 0.5, 0.32); if (i == 0) lc *= vec3(0.95, 1.0, 0.9); if (i == 1 || i == 7) lc *= vec3(0.78, 1.0, 0.7); if (i == 6) lc *= vec3(0.85, 1.0, 0.8); col += lc * ws[i]; wsum += ws[i]; } }
+  vec3 nAcc = vec3(0.0);
+  for (int i = 0; i < ${LAYERS}; i++) { if (ws[i] > 0.02) { nAcc += (texture(uNormals, vec3(tuv * 0.25, float(i))).xyz * 2.0 - 1.0) * ws[i]; vec3 lc = layerCol(float(i), tuv); if (i == 5) lc *= vec3(0.78, 0.75, 0.72); if (i == 4) lc *= 0.8; if (i == 2) lc *= vec3(0.42, 0.5, 0.32); if (i == 0) lc *= vec3(0.95, 1.0, 0.9); if (i == 1 || i == 7) lc *= vec3(0.78, 1.0, 0.7); if (i == 6) lc *= vec3(0.85, 1.0, 0.8); col += lc * ws[i]; wsum += ws[i]; } }
   col /= max(wsum, 0.001);
   float n = tNoise(vWPos.xz * 0.05) * 0.6 + tNoise(vWPos.xz * 0.21) * 0.4;
   col *= 0.82 + n * 0.32;
@@ -111,9 +115,11 @@ vec3 layerCol(float L, vec2 uv){
   vec3 soil = layerCol(5.0, tuv) * vec3(0.62, 0.55, 0.48);
   vec3 rock = layerCol(4.0, tuv) * 0.85;
   col = mix(col, mix(soil, rock, smoothstep(0.5, 0.75, slope)), rocky);
-  diffuseColor.rgb *= col;`);
+  diffuseColor.rgb *= col;
+  vec3 terrN = normalize(nAcc / max(wsum, 0.001) + vec3(0.0, 0.0, 0.001));
+  if (rocky > 0.01) terrN = normalize(mix(terrN, texture(uNormals, vec3(tuv * 0.25, 4.0)).xyz * 2.0 - 1.0, rocky));`);
   };
-  m.customProgramCacheKey = () => 'terrain-v4';
+  m.customProgramCacheKey = () => 'terrain-v5';
   return m;
 }
 

@@ -48,8 +48,9 @@ export class World {
 
   async init() {
     void preloadWorldModels().catch((e) => console.warn('model preload', e));
-    const layers = await loadTerrainArray(this.q.quality === 'low' ? 256 : 512);
-    this.terrainMat = makeTerrainMaterial(layers, tex('groundnormal_nor_gl', 1, false));
+    const sz = this.q.quality === 'low' ? 256 : this.q.quality === 'medium' ? 512 : 1024;
+    const [layers, normals] = await Promise.all([loadTerrainArray(sz), loadTerrainArray(Math.min(sz, 512), 'nor_gl')]);
+    this.terrainMat = makeTerrainMaterial(layers, tex('groundnormal_nor_gl', 1, false), normals);
     this.farMat = makeFarMaterial(layers);
     this.ready = true;
   }

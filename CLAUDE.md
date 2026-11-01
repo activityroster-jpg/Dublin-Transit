@@ -14,8 +14,9 @@ The brief is `docs/BRIEF.md`; set-up steps for Conor are `docs/SETUP.md`.
 2. **Licences.** OSM is ODbL (attribution on screen, in the README and in `docs/BRIEF.md`).
    GTFS is CC BY 4.0. LiDAR requires the statement "Contains Irish Public Sector Data
    (Geological Survey Ireland & Transport Infrastructure Ireland / Office of Public Works)
-   licensed under CC BY 4.0". Textures, sky HDRIs and scanned models are CC0 from Poly Haven
-   (`public/assets/*/CREDITS.md`, `public/assets/sky/skies.json`).
+   licensed under CC BY 4.0". Materials are CC0 from AmbientCG (`scripts/assets/fetch-ambientcg.py`,
+   tiled to their real-world size from `public/assets/textures/materials.json`); sky HDRIs and
+   scanned models are CC0 from Poly Haven (`public/assets/*/CREDITS.md`, `public/assets/sky/skies.json`).
    **Never** derive content from Google Maps / Street View imagery.
 3. **No accounts, no personal data, no third-party scripts** until a feature needs them, and
    then only after a decision from Conor. The game runs fully client-side.

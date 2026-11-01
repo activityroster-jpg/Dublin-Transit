@@ -21,4 +21,5 @@ npm run build      # production build into dist/
 - Map data © OpenStreetMap contributors, ODbL. <https://www.openstreetmap.org/copyright>
 - Timetable: National Transport Authority GTFS (Irish Rail), CC BY 4.0.
 - Elevation: Contains Irish Public Sector Data (Geological Survey Ireland & Transport Infrastructure Ireland / Office of Public Works) licensed under a Creative Commons Attribution 4.0 International (CC BY 4.0) licence; AWS Terrain Tiles (SRTM/GMTED) elsewhere.
-- Textures and sky HDRIs: [Poly Haven](https://polyhaven.com) (CC0). See `public/assets/textures/CREDITS.md` and `public/assets/sky/skies.json`.
+- Materials: [AmbientCG](https://ambientcg.com) (CC0) — scanned PBR sets with colour, normal, roughness and AO (`npm run assets:materials`).
+- Sky HDRIs, scanned plants and street furniture: [Poly Haven](https://polyhaven.com) (CC0). See `public/assets/*/CREDITS.md` and `public/assets/sky/skies.json`.

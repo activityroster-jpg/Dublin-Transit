@@ -1,0 +1,302 @@
+{
+ "ballast": {
+  "asset": "Rocks006",
+  "note": "railway ballast (angular dark granite)",
+  "sizeM": [
+   1.0,
+   1.0
+  ],
+  "normal": true,
+  "url": "https://ambientcg.com/a/Rocks006"
+ },
+ "cess": {
+  "asset": "Gravel040",
+  "note": "cess / lineside gravel",
+  "sizeM": [
+   1.0,
+   1.0
+  ],
+  "normal": true,
+  "url": "https://ambientcg.com/a/Gravel040"
+ },
+ "concrete": {
+  "asset": "Concrete042A",
+  "note": "sleepers, troughs, plinths",
+  "sizeM": [
+   1.0,
+   1.0
+  ],
+  "normal": true,
+  "url": "https://ambientcg.com/a/Concrete042A"
+ },
+ "rustmetal": {
+  "asset": "Rust004",
+  "note": "rail web and foot",
+  "sizeM": [
+   1.0,
+   1.0
+  ],
+  "normal": true,
+  "url": "https://ambientcg.com/a/Rust004"
+ },
+ "galvanised": {
+  "asset": "Metal032",
+  "note": "OLE masts, cantilevers",
+  "sizeM": [
+   1.0,
+   1.0
+  ],
+  "normal": true,
+  "url": "https://ambientcg.com/a/Metal032"
+ },
+ "metal": {
+  "asset": "Metal009",
+  "note": "brushed steel (cab, canopies)",
+  "sizeM": [
+   1.0,
+   1.0
+  ],
+  "normal": true,
+  "url": "https://ambientcg.com/a/Metal009"
+ },
+ "brick": {
+  "asset": "Bricks097",
+  "note": "Victorian red brick",
+  "sizeM": [
+   1.0,
+   1.0
+  ],
+  "normal": true,
+  "url": "https://ambientcg.com/a/Bricks097"
+ },
+ "pebbledash": {
+  "asset": "Concrete037",
+  "note": "roughcast / pebble-dash render",
+  "sizeM": [
+   1.0,
+   1.0
+  ],
+  "normal": true,
+  "url": "https://ambientcg.com/a/Concrete037"
+ },
+ "render": {
+  "asset": "Plaster003",
+  "note": "smooth render",
+  "sizeM": [
+   1.0,
+   1.0
+  ],
+  "normal": true,
+  "url": "https://ambientcg.com/a/Plaster003"
+ },
+ "stonewall": {
+  "asset": "Bricks076A",
+  "note": "granite rubble walls, sea wall, tunnels",
+  "sizeM": [
+   2.0,
+   2.0
+  ],
+  "normal": true,
+  "url": "https://ambientcg.com/a/Bricks076A"
+ },
+ "granite": {
+  "asset": "Bricks108A",
+  "note": "dressed granite (churches, stations)",
+  "sizeM": [
+   1.0,
+   1.0
+  ],
+  "normal": true,
+  "url": "https://ambientcg.com/a/Bricks108A"
+ },
+ "roof": {
+  "asset": "RoofingTiles013A",
+  "note": "Irish slate",
+  "sizeM": [
+   2.9,
+   2.9
+  ],
+  "normal": true,
+  "url": "https://ambientcg.com/a/RoofingTiles013A"
+ },
+ "flatroof": {
+  "asset": "Gravel043",
+  "note": "flat roofs (felt and gravel)",
+  "sizeM": [
+   1.6,
+   1.6
+  ],
+  "normal": true,
+  "url": "https://ambientcg.com/a/Gravel043"
+ },
+ "asphalt": {
+  "asset": "Asphalt025C",
+  "note": "road surface",
+  "sizeM": [
+   1.0,
+   1.0
+  ],
+  "normal": true,
+  "url": "https://ambientcg.com/a/Asphalt025C"
+ },
+ "footway": {
+  "asset": "PavingStones111",
+  "note": "concrete footpath slabs",
+  "sizeM": [
+   1.0,
+   1.0
+  ],
+  "normal": true,
+  "url": "https://ambientcg.com/a/PavingStones111"
+ },
+ "platform": {
+  "asset": "PavingStones109",
+  "note": "platform block paving",
+  "sizeM": [
+   1.0,
+   1.0
+  ],
+  "normal": true,
+  "url": "https://ambientcg.com/a/PavingStones109"
+ },
+ "platformwall": {
+  "asset": "Concrete044A",
+  "note": "platform faces and copings",
+  "sizeM": [
+   1.0,
+   1.0
+  ],
+  "normal": true,
+  "url": "https://ambientcg.com/a/Concrete044A"
+ },
+ "bark": {
+  "asset": "Bark012",
+  "note": "tree trunks",
+  "sizeM": [
+   1.0,
+   1.0
+  ],
+  "normal": true,
+  "url": "https://ambientcg.com/a/Bark012"
+ },
+ "rubber": {
+  "asset": "Rubber004",
+  "note": "cab floor and desk mat",
+  "sizeM": [
+   0.75,
+   0.75
+  ],
+  "normal": true,
+  "url": "https://ambientcg.com/a/Rubber004"
+ },
+ "plastic": {
+  "asset": "Plastic011",
+  "note": "moulded cab panels",
+  "sizeM": [
+   1.0,
+   1.0
+  ],
+  "normal": true,
+  "url": "https://ambientcg.com/a/Plastic011"
+ },
+ "fabric": {
+  "asset": "Fabric030",
+  "note": "driver seat cloth",
+  "sizeM": [
+   1.0,
+   1.0
+  ],
+  "normal": true,
+  "url": "https://ambientcg.com/a/Fabric030"
+ },
+ "terrain_grass": {
+  "asset": "Grass004",
+  "note": "layer 0: rough lineside grass",
+  "sizeM": [
+   1.4,
+   1.4
+  ],
+  "normal": true,
+  "url": "https://ambientcg.com/a/Grass004"
+ },
+ "terrain_urban": {
+  "asset": "Grass003",
+  "note": "layer 1: gardens",
+  "sizeM": [
+   1.4,
+   1.4
+  ],
+  "normal": true,
+  "url": "https://ambientcg.com/a/Grass003"
+ },
+ "terrain_forest": {
+  "asset": "Ground078",
+  "note": "layer 2: leaf litter",
+  "sizeM": [
+   1.0,
+   1.0
+  ],
+  "normal": true,
+  "url": "https://ambientcg.com/a/Ground078"
+ },
+ "terrain_sand": {
+  "asset": "Ground079S",
+  "note": "layer 3: sand / shore",
+  "sizeM": [
+   1.0,
+   1.0
+  ],
+  "normal": true,
+  "url": "https://ambientcg.com/a/Ground079S"
+ },
+ "terrain_rock": {
+  "asset": "Rock028",
+  "note": "layer 4: rock",
+  "sizeM": [
+   1.0,
+   1.0
+  ],
+  "normal": true,
+  "url": "https://ambientcg.com/a/Rock028"
+ },
+ "terrain_gravel": {
+  "asset": "Gravel043",
+  "note": "layer 5: formation gravel",
+  "sizeM": [
+   1.6,
+   1.6
+  ],
+  "normal": true,
+  "url": "https://ambientcg.com/a/Gravel043"
+ },
+ "terrain_park": {
+  "asset": "Grass006",
+  "note": "layer 6: mown park grass",
+  "sizeM": [
+   1.0,
+   1.0
+  ],
+  "normal": true,
+  "url": "https://ambientcg.com/a/Grass006"
+ },
+ "terrain_farm": {
+  "asset": "Grass007",
+  "note": "layer 7: fields",
+  "sizeM": [
+   1.0,
+   1.0
+  ],
+  "normal": true,
+  "url": "https://ambientcg.com/a/Grass007"
+ },
+ "terrain_paved": {
+  "asset": "Concrete030",
+  "note": "layer 8: yards and car parks",
+  "sizeM": [
+   1.0,
+   1.0
+  ],
+  "normal": true,
+  "url": "https://ambientcg.com/a/Concrete030"
+ }
+}

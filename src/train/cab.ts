@@ -7,7 +7,7 @@ import * as THREE from 'three';
 import { CAR_LEN } from './model';
 import type { Aspect } from '../render/signals';
 import { NOTCH_MAX, NOTCH_MIN, notchLabel } from './physics';
-import { gaugeTexture, tex } from '../render/textures';
+import { gaugeTexture, pbrMaterial } from '../render/textures';
 
 const ZF = CAR_LEN / 2; // cab front (local z)
 const W = (sx: number) => -sx;
@@ -45,11 +45,13 @@ export class Cab {
 
   constructor() {
     const g = this.group;
-    const shell = mat(0xd9d6cc, 0.75);
-    const darkPanel = mat(0x3c4144, 0.55, 0.2);
-    const desk = new THREE.MeshStandardMaterial({ color: 0x6a7074, roughness: 0.45, metalness: 0.5, map: tex('metal_diff', 1), normalMap: tex('metal_nor_gl', 1, false), normalScale: new THREE.Vector2(0.5, 0.5) });
-    const deskTop = new THREE.MeshStandardMaterial({ color: 0x2f3437, roughness: 0.75, metalness: 0.1, normalMap: tex('rubber_nor_gl', 1, false), normalScale: new THREE.Vector2(0.4, 0.4) });
-    const floor = mat(0x2a2a2a, 0.9);
+    // scanned CC0 surfaces (AmbientCG): moulded plastic lining, brushed metal desk, rubber mats, seat cloth
+    const shell = pbrMaterial('plastic', 2, { color: 0xe6e2d6, normalStrength: 0.6 });
+    const darkPanel = pbrMaterial('plastic', 2, { color: 0x4a5054, normalStrength: 0.6 });
+    const desk = pbrMaterial('metal', 1, { color: 0x8a9094, metal: true, normalStrength: 0.5 });
+    const deskTop = pbrMaterial('rubber', 2, { color: 0x5a5e62 });
+    const floor = pbrMaterial('rubber', 3, { color: 0x45484b });
+    const seatCloth = pbrMaterial('fabric', 3, { color: 0x3a4250 });
     const glass = new THREE.MeshPhysicalMaterial({ color: 0xffffff, roughness: 0.02, metalness: 0, transmission: 0, transparent: true, opacity: 0.08, side: THREE.DoubleSide, depthWrite: false });
     /** Box at screen-x sx. */
     const P = (m: THREE.Material, sx_: number, sy: number, sz: number, sx: number, y: number, z: number, shadow = true) => {
@@ -86,8 +88,8 @@ export class Cab {
     this.wiper.geometry = new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0);
     // seat
     // seat: cushion under the driver, back behind the eye (forward is +z)
-    P(mat(0x23272a, 0.9), 0.55, 0.12, 0.5, DRIVER_SX, 1.6, EYE.z - 0.2);
-    P(mat(0x23272a, 0.9), 0.55, 0.75, 0.1, DRIVER_SX, 2.02, EYE.z - 0.5).rotation.x = 0.15;
+    P(seatCloth, 0.55, 0.12, 0.5, DRIVER_SX, 1.6, EYE.z - 0.2);
+    P(seatCloth, 0.55, 0.75, 0.1, DRIVER_SX, 2.02, EYE.z - 0.5).rotation.x = 0.15;
     P(mat(0x444444, 0.5, 0.6), 0.08, 0.45, 0.08, DRIVER_SX, 1.3, EYE.z - 0.2);
 
     // Instrument panel: 45° face from (y 1.98, z ZF-0.45) up to (y 2.28, z ZF-0.15), facing the driver.
@@ -212,7 +214,7 @@ export class Cab {
     const handset = P(mat(0x2a2d30, 0.45, 0.2), 0.05, 0.2, 0.06, -1.3, 2.47, ZF - 1.55); handset.rotation.z = 0.08;
     const cord = new THREE.Mesh(new THREE.TorusGeometry(0.06, 0.006, 6, 24, Math.PI), mat(0x111111, 0.6)); cord.position.set(W(-1.3), 2.3, ZF - 1.55); cord.rotation.y = Math.PI / 2; g.add(cord);
     // headrest, grab rail, ceiling light panel and the door back to the saloon
-    P(mat(0x23272a, 0.9), 0.4, 0.22, 0.12, DRIVER_SX, 2.55, EYE.z - 0.5);
+    P(seatCloth, 0.4, 0.22, 0.12, DRIVER_SX, 2.55, EYE.z - 0.5);
     const rail = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 1.0, 10), mat(0xd9dcdd, 0.3, 0.8)); rail.rotation.z = Math.PI / 2; rail.position.set(0.3, 3.25, ZF - 0.14); g.add(rail);
     this.ceilingLight = new THREE.MeshStandardMaterial({ color: 0xf2f2f2, emissive: new THREE.Color(1, 0.95, 0.85), emissiveIntensity: 0 });
     P(this.ceilingLight, 0.9, 0.02, 0.25, 0, 3.52, ZF - 1.2, false);

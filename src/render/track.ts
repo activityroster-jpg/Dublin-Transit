@@ -2,7 +2,7 @@
 // equipment, generated along the real track geometry in chunks.
 import * as THREE from 'three';
 import type { TrackPath } from '../dart/path';
-import { chainlinkTexture, tex } from './textures';
+import { chainlinkTexture, pbrMaterial } from './textures';
 
 export const CHUNK = 200;
 const GAUGE_HALF = 0.8 + 0.036; // Irish gauge 1600 mm, measured to rail centres
@@ -17,24 +17,25 @@ export interface TrackMaterials {
 }
 
 export function makeTrackMaterials(): TrackMaterials {
-  const ballastMap = tex('ballast_diff', 1);
-  const ballastNor = tex('ballast_nor_gl', 1, false);
+  // UV conventions: sweep() writes metres * uScale; textures are tiled to their real-world size
+  // (AmbientCG metadata in public/assets/textures/materials.json).
   return {
     railTop: new THREE.MeshStandardMaterial({ color: 0xd8dde2, metalness: 1, roughness: 0.22 }),
-    railSide: new THREE.MeshStandardMaterial({ color: 0x5a3a26, metalness: 0.5, roughness: 0.8, map: tex('rustmetal_diff', 1) }),
-    sleeper: new THREE.MeshStandardMaterial({ color: 0xa8a49c, roughness: 0.9, map: tex('concrete_diff', 1), normalMap: tex('concrete_nor_gl', 1, false) }),
-    ballast: new THREE.MeshStandardMaterial({ color: 0x8f8a84, roughness: 1, map: ballastMap, normalMap: ballastNor, normalScale: new THREE.Vector2(1.4, 1.4) }),
-    masonry: new THREE.MeshStandardMaterial({ side: THREE.DoubleSide, color: 0xb0a596, roughness: 0.95, map: tex('stonewall_diff', 1), normalMap: tex('stonewall_nor_gl', 1, false) }),
+    railSide: pbrMaterial('rustmetal', 1, { color: 0x8a6a58, metal: false, roughness: 1 }),
+    sleeper: pbrMaterial('concrete', 1, { color: 0xb8b4ac }),
+    // ballast sweep uv = 0.5/m; Rocks006 is a 1 m tile -> 1.5 m stones read right
+    ballast: pbrMaterial('ballast', 1.33, { color: 0xb4b0aa, normalStrength: 1.6, aoStrength: 1 }),
+    masonry: pbrMaterial('stonewall', 2, { side: THREE.DoubleSide, color: 0xc8c2b8 }),
     steel: new THREE.MeshStandardMaterial({ side: THREE.DoubleSide, color: 0x3f5560, roughness: 0.6, metalness: 0.6 }),
-    mast: new THREE.MeshStandardMaterial({ color: 0x8c9296, roughness: 0.55, metalness: 0.7 }),
+    mast: pbrMaterial('galvanised', 1, { color: 0xb8bec2, metal: true }),
     wire: new THREE.MeshStandardMaterial({ color: 0x5a4632, roughness: 0.5, metalness: 0.8 }),
-    tunnel: new THREE.MeshStandardMaterial({ color: 0x5b5249, roughness: 1, map: tex('stonewall_diff', 1), normalMap: tex('stonewall_nor_gl', 1, false), side: THREE.DoubleSide }),
-    concrete: new THREE.MeshStandardMaterial({ color: 0xb4b0a8, roughness: 0.9, map: tex('concrete_diff', 1), normalMap: tex('concrete_nor_gl', 1, false) }),
-    trough: new THREE.MeshStandardMaterial({ color: 0x9a978f, roughness: 0.95, map: tex('concrete_diff', 1), normalMap: tex('concrete_nor_gl', 1, false) }),
+    tunnel: pbrMaterial('stonewall', 2, { color: 0x6f665c, side: THREE.DoubleSide }),
+    concrete: pbrMaterial('concrete', 1, { color: 0xb4b0a8 }),
+    trough: pbrMaterial('concrete', 1, { color: 0x9a978f }),
     chainlink: new THREE.MeshStandardMaterial({ map: chainlinkTexture(), alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.5, metalness: 0.6, color: 0xb8bcb8 }),
-    post: new THREE.MeshStandardMaterial({ color: 0x4f5652, roughness: 0.6, metalness: 0.5 }),
+    post: pbrMaterial('galvanised', 1, { color: 0x6f7672, metal: true }),
     insulator: new THREE.MeshStandardMaterial({ color: 0x5a3b2a, roughness: 0.35 }),
-    cabinet: new THREE.MeshStandardMaterial({ color: 0x6f7d72, roughness: 0.6, metalness: 0.3 }),
+    cabinet: pbrMaterial('galvanised', 1, { color: 0x7a8a7e, metal: true }),
   };
 }
 

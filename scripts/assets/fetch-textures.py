@@ -9,30 +9,10 @@ OUT = os.path.join(ROOT, 'public', 'assets', 'textures')
 os.makedirs(OUT, exist_ok=True)
 
 # name in game -> (polyhaven id, maps, size)
+# Most slots now come from AmbientCG (scripts/assets/fetch-ambientcg.py, higher resolution with
+# roughness/AO). Poly Haven still supplies the generic ground detail normal.
 TEX = {
-    'terrain_grass':   ('sparse_grass', ['diff'], 512),
-    'terrain_park':    ('sparse_grass', ['diff'], 512),
-    'terrain_farm':    ('grass_ground', ['diff'], 512),
-    'terrain_forest':  ('forest_floor', ['diff'], 512),
-    'terrain_urban':   ('grass_ground', ['diff'], 512),
-    'terrain_sand':    ('coast_sand_01', ['diff'], 512),
-    'terrain_rock':    ('aerial_rocks_02', ['diff'], 512),
-    'terrain_gravel':  ('gravel', ['diff'], 512),
-    'terrain_paved':   ('concrete_floor', ['diff'], 512),
-    'ballast':         ('gravel', ['diff', 'nor_gl', 'arm'], 1024),
-    'asphalt':         ('asphalt_02', ['diff', 'nor_gl'], 1024),
-    'platform':        ('rectangular_paving', ['diff', 'nor_gl'], 1024),
-    'concrete':        ('concrete', ['diff', 'nor_gl'], 1024),
-    'stonewall':       ('rustic_stone_wall', ['diff', 'nor_gl'], 1024),
-    'brick':           ('brick_wall_001', ['diff', 'nor_gl'], 1024),
-    'pebbledash':      ('pebble_embedded_concrete', ['diff', 'nor_gl'], 1024),
-    'roof':            ('grey_roof_tiles', ['diff', 'nor_gl'], 1024),
-    'bark':            ('bark_brown_02', ['diff'], 512),
-    'rustmetal':       ('rusty_metal_02', ['diff'], 512),
     'groundnormal':    ('leafy_grass', ['nor_gl'], 1024),
-    'metal':           ('metal_plate', ['diff', 'nor_gl'], 1024),
-    'rubber':          ('rubber_floor_01' if False else 'anti_slip_concrete', ['diff', 'nor_gl'], 512),
-    'paving':          ('brick_pavement_02', ['diff', 'nor_gl'], 1024),
 }
 
 def get(url):

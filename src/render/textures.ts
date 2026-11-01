@@ -26,10 +26,28 @@ function loadImage(url: string): Promise<HTMLImageElement> {
   return new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = url; });
 }
 
+/** A full PBR set (AmbientCG / Poly Haven slot): colour, OpenGL normal, packed AO/roughness/metal. */
+export interface PbrSet { map: THREE.Texture; normalMap: THREE.Texture; arm: THREE.Texture }
+export function pbr(slot: string, repeat = 1): PbrSet {
+  return { map: tex(`${slot}_diff`, repeat), normalMap: tex(`${slot}_nor_gl`, repeat, false), arm: tex(`${slot}_arm`, repeat, false) };
+}
+/** MeshStandardMaterial from a PBR set. AO and roughness come from the packed ARM map; metalness too if metal. */
+export function pbrMaterial(slot: string, repeat = 1, opts: THREE.MeshStandardMaterialParameters & { metal?: boolean; normalStrength?: number; aoStrength?: number } = {}): THREE.MeshStandardMaterial {
+  const t = pbr(slot, repeat);
+  const { metal, normalStrength, aoStrength, ...rest } = opts;
+  const n = normalStrength ?? 1;
+  return new THREE.MeshStandardMaterial({
+    map: t.map, normalMap: t.normalMap, normalScale: new THREE.Vector2(n, n),
+    roughnessMap: t.arm, roughness: 1, aoMap: t.arm, aoMapIntensity: aoStrength ?? 0.8,
+    metalnessMap: metal ? t.arm : null, metalness: metal ? 1 : 0,
+    ...rest,
+  });
+}
+
 /** Terrain layers packed into one array texture (one draw, nine materials). */
 export const TERRAIN_LAYERS = ['terrain_grass', 'terrain_urban', 'terrain_forest', 'terrain_sand', 'terrain_rock', 'terrain_gravel', 'terrain_park', 'terrain_farm', 'terrain_paved'];
-export async function loadTerrainArray(size = 512): Promise<THREE.DataArrayTexture> {
-  const imgs = await Promise.all(TERRAIN_LAYERS.map((n) => loadImage(`${BASE}${n}_diff.jpg`)));
+export async function loadTerrainArray(size = 512, suffix = 'diff'): Promise<THREE.DataArrayTexture> {
+  const imgs = await Promise.all(TERRAIN_LAYERS.map((n) => loadImage(`${BASE}${n}_${suffix}.jpg`)));
   const cv = document.createElement('canvas');
   cv.width = cv.height = size;
   const ctx = cv.getContext('2d', { willReadFrequently: true })!;
@@ -45,7 +63,7 @@ export async function loadTerrainArray(size = 512): Promise<THREE.DataArrayTextu
   t.magFilter = THREE.LinearFilter;
   t.generateMipmaps = true;
   t.anisotropy = maxAniso;
-  t.colorSpace = THREE.SRGBColorSpace;
+  t.colorSpace = suffix === 'diff' ? THREE.SRGBColorSpace : THREE.NoColorSpace;
   t.needsUpdate = true;
   return t;
 }

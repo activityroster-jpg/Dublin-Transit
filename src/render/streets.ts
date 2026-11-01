@@ -1,22 +1,23 @@
 // Roads (draped ribbons, road bridges with decks and parapets), walls/fences/hedges, street lamps.
 import * as THREE from 'three';
 import type { SceneryTile } from '../dart/data';
-import { fenceTexture, tex } from './textures';
+import { fenceTexture, pbrMaterial, tex } from './textures';
 import { instance, loadModel, placement } from './models';
 
 let mats: Record<string, THREE.Material> | null = null;
 export const lampUniforms = { night: 0 };
 export function streetMaterials() {
   if (mats) return mats;
-  const asphalt = new THREE.MeshStandardMaterial({ map: tex('asphalt_diff', 1), normalMap: tex('asphalt_nor_gl', 1, false), roughness: 0.92, color: 0x9a9a9a, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 });
-  const footway = new THREE.MeshStandardMaterial({ map: tex('platform_diff', 1), roughness: 0.9, color: 0xc9c4ba, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 });
+  // street ribbons have uv = 0.25/m; AmbientCG tiles are 1 m
+  const asphalt = pbrMaterial('asphalt', 4, { color: 0xb8b8b8, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 });
+  const footway = pbrMaterial('footway', 4, { color: 0xd0ccc4, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 });
   const marking = new THREE.MeshStandardMaterial({ color: 0xeeeeee, roughness: 0.7, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -8, transparent: true });
   const fence = new THREE.MeshStandardMaterial({ map: fenceTexture(), alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.6, metalness: 0.4 });
-  const wall = new THREE.MeshStandardMaterial({ map: tex('stonewall_diff', 1), normalMap: tex('stonewall_nor_gl', 1, false), roughness: 0.95, side: THREE.DoubleSide });
-  const brickwall = new THREE.MeshStandardMaterial({ map: tex('brick_diff', 1), normalMap: tex('brick_nor_gl', 1, false), roughness: 0.95, side: THREE.DoubleSide });
+  const wall = pbrMaterial('stonewall', 1, { side: THREE.DoubleSide, color: 0xd0cac0 });
+  const brickwall = pbrMaterial('brick', 2, { side: THREE.DoubleSide });
   const hedge = new THREE.MeshStandardMaterial({ color: 0x2f4a22, roughness: 1, map: tex('terrain_forest_diff', 1) });
-  const concrete = new THREE.MeshStandardMaterial({ map: tex('concrete_diff', 1), roughness: 0.9, side: THREE.DoubleSide });
-  const kerb = new THREE.MeshStandardMaterial({ color: 0xb9b6ae, roughness: 0.85, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -6 });
+  const concrete = pbrMaterial('concrete', 1, { side: THREE.DoubleSide });
+  const kerb = pbrMaterial('granite', 4, { color: 0xc4c0b8, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -6 });
   const lampPole = new THREE.MeshStandardMaterial({ color: 0x3b3f42, roughness: 0.5, metalness: 0.6 });
   const lampHead = new THREE.MeshStandardMaterial({ color: 0x222222, emissive: new THREE.Color(1, 0.75, 0.45), emissiveIntensity: 0 });
   mats = { asphalt, footway, marking, fence, wall, brickwall, hedge, concrete, lampPole, lampHead, kerb };
