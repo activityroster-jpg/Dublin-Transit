@@ -2,11 +2,11 @@
 // streets, trees and lineside grass. Builds a few items per frame to avoid hitches.
 import * as THREE from 'three';
 import type { DartData } from '../dart/data';
-import { loadSceneryTile } from '../dart/data';
+import { loadLineside, loadSceneryTile } from '../dart/data';
 import type { Network, TrackPath } from '../dart/path';
 import type { QualitySettings } from '../core/env';
 import { HeightField, buildFarTile, buildNearTile, makeFarMaterial, makeTerrainMaterial } from './terrain';
-import { CHUNK, buildOleChunk, buildTrackChunk, makeTrackMaterials, type TrackMaterials } from './track';
+import { CHUNK, buildOleChunk, buildTrackChunk, makeTrackMaterials, type LinesideData, type TrackMaterials } from './track';
 import { buildStation } from './stations';
 import { buildBuildings } from './buildings';
 import { buildStreets } from './streets';
@@ -40,6 +40,7 @@ export class World {
   private lastCheck = -1e9;
   readonly playerSignals = new Map<number, SignalMesh>();
   private ready = false;
+  private lineside: LinesideData | null = null;
 
   constructor(private data: DartData, private net: Network, private q: QualitySettings, private playerPath: TrackPath) {
     this.hf = new HeightField(data);
@@ -48,6 +49,7 @@ export class World {
 
   async init() {
     void preloadWorldModels().catch((e) => console.warn('model preload', e));
+    this.lineside = await loadLineside();
     const sz = this.q.quality === 'low' ? 256 : this.q.quality === 'medium' ? 512 : 1024;
     const [layers, normals] = await Promise.all([loadTerrainArray(sz), loadTerrainArray(Math.min(sz, 512), 'nor_gl')]);
     this.terrainMat = makeTerrainMaterial(layers, tex('groundnormal_nor_gl', 1, false), normals);
@@ -109,8 +111,9 @@ export class World {
         const mid = path.point((ci + 0.5) * CHUNK);
         const d = mid.distanceTo(cam);
         if (d > VD) continue;
-        this.want(`tr${path.id}${ci}`, d, () => buildTrackChunk(path, own, ci, this.trackMats, d < 600 ? 1 : 0, { groundAt: (x, z) => hf.height(x, z), noFence: path.data.stations.map((st) => [st.platform.s0 - 15, st.platform.s1 + 15]) }), needed);
-        if (d < Math.min(VD, 1500)) this.want(`ol${path.id}${ci}`, d + 50, () => buildOleChunk(path, own, ci, this.trackMats), needed);
+        const lsp = this.lineside?.paths[path.id];
+        this.want(`tr${path.id}${ci}`, d, () => buildTrackChunk(path, own, ci, this.trackMats, d < 600 ? 1 : 0, { groundAt: (x, z) => hf.height(x, z), noFence: path.data.stations.map((st) => [st.platform.s0 - 15, st.platform.s1 + 15]), lineside: lsp, lsStep: this.lineside?.step }), needed);
+        if (d < Math.min(VD, 1500)) this.want(`ol${path.id}${ci}`, d + 50, () => buildOleChunk(path, own, ci, this.trackMats, lsp && this.lineside ? { data: lsp, step: this.lineside.step } : undefined), needed);
         if (this.q.grassDensity > 0 && path === this.playerPath && d < 350) this.want(`gr${path.id}${ci}`, d + 100, () => this.buildGrassChunk(path, ci), needed);
       }
       path.data.stations.forEach((st, k) => {

@@ -8,6 +8,7 @@ import path from 'node:path';
 import { OUT, RAW, project, unproject, readJson, round } from './lib.mjs';
 import { Dem, LayeredDem } from './fetch-dem.mjs';
 import { SegHash, joinRings, pointInRing, ringBBox, ringArea, mulberry32 } from './geom.mjs';
+import { LS, LS_STEP, classifyLineside } from './lineside.mjs';
 
 export const NEAR = { size: 256, n: 65 };   // 4 m grid
 export const FAR = { size: 2048, n: 65 };   // 32 m grid
@@ -160,6 +161,14 @@ export async function buildWorld() {
     const cross = sd[2] * rz - sd[3] * rx;
     return { d: Math.hypot(rx, rz), sea: cross > 0 };
   };
+
+  // What is beside each track (sea wall, retaining wall, bank, open, urban...), from data.
+  const lineside = classifyLineside(net, natural, coastInfo, buildings);
+  fs.writeFileSync(path.join(OUT, 'dart', 'lineside.json'), JSON.stringify(lineside));
+  const lsCount = {};
+  for (const lp of Object.values(lineside.paths)) for (const ch of lp.L + lp.R) lsCount[ch] = (lsCount[ch] ?? 0) + 1;
+  console.log('lineside classes:', Object.entries(LS).map(([k, v]) => `${k} ${lsCount[String.fromCharCode(48 + v)] ?? 0}`).join(', '));
+  if (process.env.LINESIDE_ONLY) return;
 
   // ---- Near terrain tiles ----
   const nearTiles = new Set();
@@ -377,31 +386,37 @@ export async function buildWorld() {
   for (const p of buildings) for (let i = 0; i < p.ring.length - 2; i += 2) bldHash.add(p.ring[i], p.ring[i + 1], p.ring[i + 2], p.ring[i + 3], null);
   const roadHash = new SegHash(32);
   for (const w of osm.ways.values()) { if (!w.tags?.highway || roadW[w.tags.highway] == null) continue; for (let i = 0; i < w.nodes.length - 1; i++) { const a = P(w.nodes[i]), b = P(w.nodes[i + 1]); if (a && b) roadHash.add(a[0], a[1], b[0], b[1], roadW[w.tags.highway]); } }
-  const stationRanges = net.paths.flatMap((p) => p.stations.map((st) => ({ p: p.id, s0: st.platform.s0 - 30, s1: st.platform.s1 + 30 })));
+  // Lineside vegetation, by class: dense brambles, scrub and self-seeded trees on banks and above
+  // walls (the overgrown look of the Dalkey and Killiney cuttings), a scatter on open verges,
+  // sparse gorse on cliffs, little in urban sections, none on the sea side.
+  // [chance per 5 m sample, min lateral, max lateral, tree share]
+  const VEG = { [LS.OPEN]: [1.0, 6.5, 16, 0.3], [LS.BANK]: [2.6, 5.2, 22, 0.35], [LS.WALL]: [1.6, 8.5, 24, 0.55], [LS.SEA]: [0, 0, 0, 0], [LS.URBAN]: [0.2, 6, 12, 0.2], [LS.CLIFF]: [0.7, 6, 30, 0.05] };
   let nv = 0;
   for (const p of net.paths) {
+    const lp = lineside.paths[p.id];
     const n = p.pts.length / 3;
     for (let i = 1; i < n - 1; i++) {
       const s = i * p.step;
-      if (stationRanges.some((r) => r.p === p.id && s >= r.s0 && s <= r.s1)) continue;
-      const st = structAt(p, s);
-      if (st && (st[2] === 'tunnel' || st[2] === 'viaduct')) continue;
+      const j = Math.min(lp.L.length - 1, Math.round(s / LS_STEP));
       const x = p.pts[i * 3], z = p.pts[i * 3 + 2];
       const dx = p.pts[i * 3 + 3] - p.pts[i * 3 - 3], dz = p.pts[i * 3 + 5] - p.pts[i * 3 - 1], L = Math.hypot(dx, dz) || 1;
       const rx = -dz / L, rz = dx / L;
-      for (let k = 0; k < 3; k++) {
-        if (rnd() > 0.6) continue;
-        const side = rnd() < 0.5 ? -1 : 1;
-        const dist = 6.5 + rnd() * rnd() * 38;
-        const px = x + rx * side * dist + (rnd() - 0.5) * 4, pz = z + rz * side * dist + (rnd() - 0.5) * 4;
-        const ti = trackInfo(px, pz, 30);
-        if (ti && ti.d < 6.5) continue;
-        if (bldHash.nearest(px, pz, 4)) continue;
-        const rd = roadHash.nearest(px, pz, 12); if (rd && rd.d < rd.seg.data / 2 + 1.5) continue;
-        const h = heightAt(px, pz);
-        if (h < 0.3) continue;
-        tileOf(px, pz).t.push([q(px), q(pz), q(h), rnd() < 0.7 ? 4 : 2]);
-        nv++;
+      for (const side of [-1, 1]) {
+        const code = (side < 0 ? lp.L : lp.R).charCodeAt(j) - 48;
+        const v = VEG[code]; if (!v || !v[0]) continue;
+        let count = Math.floor(v[0]) + (rnd() < v[0] % 1 ? 1 : 0);
+        while (count-- > 0) {
+          const dist = v[1] + Math.pow(rnd(), 1.6) * (v[2] - v[1]);
+          const px = x + rx * side * dist + (rnd() - 0.5) * 4, pz = z + rz * side * dist + (rnd() - 0.5) * 4;
+          const ti = trackInfo(px, pz, 30);
+          if (ti && ti.d < 5) continue;
+          if (bldHash.nearest(px, pz, 3)) continue;
+          const rd = roadHash.nearest(px, pz, 12); if (rd && rd.d < rd.seg.data / 2 + 1.5) continue;
+          const h = heightAt(px, pz);
+          if (h < 0.3) continue;
+          tileOf(px, pz).t.push([q(px), q(pz), q(h), rnd() < v[3] ? 2 : 4]);
+          nv++;
+        }
       }
     }
   }

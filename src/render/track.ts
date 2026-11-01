@@ -2,7 +2,7 @@
 // equipment, generated along the real track geometry in chunks.
 import * as THREE from 'three';
 import type { TrackPath } from '../dart/path';
-import { chainlinkTexture, pbrMaterial } from './textures';
+import { chainlinkTexture, palisadeTexture, pbrMaterial, weldMeshTexture } from './textures';
 
 export const CHUNK = 200;
 const GAUGE_HALF = 0.8 + 0.036; // Irish gauge 1600 mm, measured to rail centres
@@ -14,6 +14,7 @@ export interface TrackMaterials {
   railTop: THREE.Material; railSide: THREE.Material; sleeper: THREE.Material; ballast: THREE.Material;
   masonry: THREE.Material; steel: THREE.Material; mast: THREE.Material; wire: THREE.Material; tunnel: THREE.Material; concrete: THREE.Material;
   trough: THREE.Material; chainlink: THREE.Material; post: THREE.Material; insulator: THREE.Material; cabinet: THREE.Material;
+  mesh: THREE.Material; palisade: THREE.Material; granite: THREE.Material; coping: THREE.Material;
 }
 
 export function makeTrackMaterials(): TrackMaterials {
@@ -36,6 +37,12 @@ export function makeTrackMaterials(): TrackMaterials {
     post: pbrMaterial('galvanised', 1, { color: 0x6f7672, metal: true }),
     insulator: new THREE.MeshStandardMaterial({ color: 0x5a3b2a, roughness: 0.35 }),
     cabinet: pbrMaterial('galvanised', 1, { color: 0x7a8a7e, metal: true }),
+    // boundary treatments seen along the line: dark green weld-mesh on open verges, tall grey
+    // palisade in urban/industrial sections, granite rubble retaining and sea walls with a coping
+    mesh: new THREE.MeshStandardMaterial({ map: weldMeshTexture(), alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.55, metalness: 0.3, color: 0x2e4a38 }),
+    palisade: new THREE.MeshStandardMaterial({ map: palisadeTexture(), alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.5, metalness: 0.6, color: 0x9aa2a4 }),
+    granite: pbrMaterial('stonewall', 2, { color: 0xbab3a8, side: THREE.DoubleSide }),
+    coping: pbrMaterial('concrete', 1, { color: 0xa8a49c }),
   };
 }
 
@@ -92,7 +99,11 @@ function ownedRanges(path: TrackPath, owner: Uint8Array, s0: number, s1: number)
   return out;
 }
 
-export interface TrackExtras { groundAt?: (x: number, z: number) => number; noFence?: [number, number][] }
+/** Lineside classes from public/data/dart/lineside.json (see scripts/data/lineside.mjs). */
+export const LS = { OPEN: 0, BANK: 1, WALL: 2, SEA: 3, URBAN: 4, STATION: 5, STRUCT: 6, NONE: 7, CLIFF: 8 } as const;
+export interface LinesidePath { L: string; R: string; hL: number[]; hR: number[]; adj: number[]; portal: string; noMast: string }
+export interface LinesideData { step: number; paths: Record<string, LinesidePath> }
+export interface TrackExtras { groundAt?: (x: number, z: number) => number; noFence?: [number, number][]; lineside?: LinesidePath; lsStep?: number }
 const postGeo = new THREE.CylinderGeometry(0.035, 0.04, 1.9, 8); postGeo.translate(0, 0.95, 0);
 
 export function buildTrackChunk(path: TrackPath, owner: Uint8Array, ci: number, M: TrackMaterials, detail: number, extras: TrackExtras = {}): THREE.Group | null {
@@ -147,34 +158,7 @@ export function buildTrackChunk(path: TrackPath, owner: Uint8Array, ci: number, 
     // Lineside cable trough on the cess (outer side of this track) and the boundary fence.
     if (!onDeck && !(st && st[2] === 'tunnel')) {
       g.add(new THREE.Mesh(sweep(path, a, b, 4, [[-3.35, -0.78], [-3.35, -0.5], [-2.9, -0.5], [-2.9, -0.78]], origin, 1, false), M.trough));
-      if (extras.groundAt) {
-        // fence: 4.8 m out, following the carved ground; skipped through stations and structures
-        const segs: [number, number][] = [];
-        let fs = a;
-        const blocked = (s: number) => (extras.noFence ?? []).some(([x0, x1]) => s > x0 && s < x1) || !!path.structure(s);
-        for (let s = a; s <= b; s += 10) {
-          if (blocked(s)) { if (s - fs > 10) segs.push([fs, s]); fs = s + 10; }
-        }
-        if (b - fs > 10) segs.push([fs, b]);
-        const posts: THREE.Matrix4[] = [];
-        for (const [f0, f1] of segs) {
-          const n = Math.max(2, Math.ceil((f1 - f0) / 2.5) + 1);
-          const pos = new Float32Array(n * 2 * 3), uv = new Float32Array(n * 2 * 2), idx: number[] = [];
-          for (let i = 0; i < n; i++) {
-            const s = f0 + ((f1 - f0) * i) / (n - 1);
-            path.offsetPoint(s, -4.8, 0, p);
-            const gy = extras.groundAt(p.x, p.z);
-            pos.set([p.x - origin.x, gy - origin.y, p.z - origin.z, p.x - origin.x, gy + 1.85 - origin.y, p.z - origin.z], i * 6);
-            uv.set([s / 2, 0, s / 2, 0.95], i * 4);
-            if (i) { const k = (i - 1) * 2; idx.push(k, k + 2, k + 1, k + 1, k + 2, k + 3); }
-            if (i < n - 1) { path.tangent(s, t); q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.atan2(t.x, t.z)); posts.push(new THREE.Matrix4().compose(new THREE.Vector3(p.x - origin.x, gy - origin.y, p.z - origin.z), q, sc.set(1, 1, 1))); }
-          }
-          const fg = new THREE.BufferGeometry();
-          fg.setAttribute('position', new THREE.BufferAttribute(pos, 3)); fg.setAttribute('uv', new THREE.BufferAttribute(uv, 2)); fg.setIndex(idx); fg.computeVertexNormals();
-          g.add(new THREE.Mesh(fg, M.chainlink));
-        }
-        if (posts.length) { const pm = new THREE.InstancedMesh(postGeo, M.post, posts.length); posts.forEach((m, i) => pm.setMatrixAt(i, m)); pm.castShadow = true; g.add(pm); }
-      }
+      if (extras.groundAt) buildBoundaries(g, path, a, b, origin, M, extras);
     }
 
     // Structures
@@ -244,8 +228,79 @@ export function buildTrackChunk(path: TrackPath, owner: Uint8Array, ci: number, 
   return g;
 }
 
+/** Boundary on each side of the line, by lineside class: fence, palisade, retaining wall or sea wall. */
+function buildBoundaries(g: THREE.Group, path: TrackPath, a: number, b: number, origin: THREE.Vector3, M: TrackMaterials, extras: TrackExtras) {
+  const ls = extras.lineside, step = extras.lsStep ?? 25, groundAt = extras.groundAt!;
+  const codeAt = (side: number, s: number): number => {
+    if (!ls) return side < 0 ? LS.OPEN : LS.NONE;
+    const j = Math.max(0, Math.min(ls.L.length - 1, Math.round(s / step)));
+    return (side < 0 ? ls.L : ls.R).charCodeAt(j) - 48;
+  };
+  const wallH = (side: number, s: number): number => {
+    if (!ls) return 3;
+    const j = Math.max(0, Math.min(ls.L.length - 1, Math.round(s / step)));
+    return ((side < 0 ? ls.hL : ls.hR)[j] ?? 30) / 10;
+  };
+  const blocked = (s: number) => (extras.noFence ?? []).some(([x0, x1]) => s > x0 && s < x1) || !!path.structure(s);
+  // [lateral, height or null for wall height, material, ground-following?]
+  const style: Record<number, { lat: number; h: number | null; mat: THREE.Material; follow: boolean; thick: number }> = {
+    [LS.OPEN]: { lat: 4.9, h: 1.9, mat: M.mesh, follow: true, thick: 0 },
+    [LS.URBAN]: { lat: 4.6, h: 2.4, mat: M.palisade, follow: true, thick: 0 },
+    [LS.WALL]: { lat: 4.1, h: null, mat: M.granite, follow: false, thick: 0.55 },
+    [LS.SEA]: { lat: 4.0, h: 1.15, mat: M.granite, follow: false, thick: 0.6 },
+  };
+  const p = new THREE.Vector3(), t = new THREE.Vector3(), q = new THREE.Quaternion(), sc = new THREE.Vector3(1, 1, 1);
+  for (const side of [-1, 1]) {
+    // runs of identical class
+    const runs: [number, number, number][] = [];
+    let r0 = a, rc = -1;
+    for (let s = a; s <= b + 0.01; s += 5) {
+      const c = blocked(s) ? -2 : codeAt(side, s);
+      if (c !== rc) { if (rc >= 0 && s - r0 > 4) runs.push([r0, s, rc]); r0 = s; rc = c; }
+    }
+    if (rc >= 0 && b - r0 > 4) runs.push([r0, b, rc]);
+    const posts: THREE.Matrix4[] = [];
+    for (const [f0, f1, code] of runs) {
+      const st = style[code]; if (!st) continue;
+      const n = Math.max(2, Math.ceil((f1 - f0) / 2.5) + 1);
+      const lat = side * st.lat;
+      const faces = st.thick ? 3 : 1; // walls: front, back and top; fences: one double-sided sheet
+      const pos = new Float32Array(n * 2 * 3 * faces), uv = new Float32Array(n * 2 * 2 * faces), idx: number[] = [];
+      for (let i = 0; i < n; i++) {
+        const s = f0 + ((f1 - f0) * i) / (n - 1);
+        path.offsetPoint(s, lat, 0, p);
+        const railY = p.y;
+        const base = st.follow ? groundAt(p.x, p.z) : railY - 1.2;
+        const top = st.h != null ? (st.follow ? base + st.h : railY - 0.6 + st.h) : railY - 0.8 + wallH(side, s);
+        const r = path.right(s, t);
+        const ox = r.x * side * st.thick, oz = r.z * side * st.thick;
+        const put = (f: number, k: number, x: number, y: number, z: number, u: number, v: number) => {
+          const o = (f * n * 2 + i * 2 + k);
+          pos.set([x - origin.x, y - origin.y, z - origin.z], o * 3); uv.set([u, v], o * 2);
+        };
+        const u = s / (st.thick ? 2 : 2);
+        put(0, 0, p.x, base, p.z, u, 0); put(0, 1, p.x, top, p.z, u, (top - base) / (st.follow ? 1.9 : 2));
+        if (faces === 3) {
+          put(1, 0, p.x + ox, base, p.z + oz, u, 0); put(1, 1, p.x + ox, top, p.z + oz, u, (top - base) / 2);
+          put(2, 0, p.x, top, p.z, u, 0); put(2, 1, p.x + ox, top, p.z + oz, u, st.thick / 2);
+        }
+        if (i) for (let f = 0; f < faces; f++) {
+          const k = f * n * 2 + (i - 1) * 2;
+          // wind so the face toward the track is front-facing
+          if ((side < 0) !== (f === 1)) idx.push(k, k + 2, k + 1, k + 1, k + 2, k + 3); else idx.push(k, k + 1, k + 2, k + 1, k + 3, k + 2);
+        }
+        if (st.follow && i < n - 1) { path.tangent(s, t); q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.atan2(t.x, t.z)); posts.push(new THREE.Matrix4().compose(new THREE.Vector3(p.x - origin.x, base - origin.y, p.z - origin.z), q, sc.set(1, (st.h ?? 1.9) / 1.9, 1))); }
+      }
+      const fg = new THREE.BufferGeometry();
+      fg.setAttribute('position', new THREE.BufferAttribute(pos, 3)); fg.setAttribute('uv', new THREE.BufferAttribute(uv, 2)); fg.setIndex(idx); fg.computeVertexNormals();
+      const mesh = new THREE.Mesh(fg, st.mat); mesh.castShadow = !!st.thick; mesh.receiveShadow = true; g.add(mesh);
+    }
+    if (posts.length) { const pm = new THREE.InstancedMesh(postGeo, M.post, posts.length); posts.forEach((m, i) => pm.setMatrixAt(i, m)); pm.castShadow = true; g.add(pm); }
+  }
+}
+
 /** Overhead line: masts, cantilevers, contact + catenary wires, droppers. */
-export function buildOleChunk(path: TrackPath, owner: Uint8Array, ci: number, M: TrackMaterials): THREE.Group | null {
+export function buildOleChunk(path: TrackPath, owner: Uint8Array, ci: number, M: TrackMaterials, ls?: { data: LinesidePath; step: number }): THREE.Group | null {
   const s0 = ci * CHUNK, s1 = Math.min(path.length, (ci + 1) * CHUNK);
   const ranges = ownedRanges(path, owner, s0, s1);
   if (!ranges.length) return null;
@@ -273,24 +328,46 @@ export function buildOleChunk(path: TrackPath, owner: Uint8Array, ci: number, M:
       const sN = s + SPAN;
       const staggerN = -stagger;
       const pyNow = path.point(s, p).y;
+      // lineside: portal gantry over both tracks (urban double track), or no mast of our own
+      const j = ls ? Math.max(0, Math.min(ls.data.L.length - 1, Math.round(s / ls.step))) : -1;
+      const noMast = !!ls && ls.data.noMast[j] === '1';
+      const adj = ls ? ls.data.adj[j] / 10 : 0;
+      const portal = !!ls && ls.data.portal[j] === '1' && Math.abs(adj) > 2.5;
       // mast + cantilever
-      if (!inTun) {
+      if (!inTun && !noMast) {
         path.point(s, p); path.right(s, r); path.tangent(s, t);
-        const base = local(s, -3.3, -0.8);
         const yaw = Math.atan2(t.x, t.z);
         const rot = new THREE.Quaternion().setFromAxisAngle(up, yaw);
         // H-section mast: two flanges and a web, on a concrete plinth
-        const fl = new THREE.Vector3(0.24, 8.3, 0.02);
-        for (const dz of [-0.13, 0.13]) masts.push(new THREE.Matrix4().compose(base.clone().add(new THREE.Vector3(Math.cos(yaw) * dz, 4.15, -Math.sin(yaw) * dz)), rot, fl));
-        masts.push(new THREE.Matrix4().compose(base.clone().add(new THREE.Vector3(0, 4.15, 0)), rot, new THREE.Vector3(0.02, 8.3, 0.24)));
-        plinths.push(new THREE.Matrix4().compose(base.clone().add(new THREE.Vector3(0, 0.2, 0)), rot, new THREE.Vector3(0.55, 0.5, 0.55)));
-        // insulators at the mast end of each arm and at the registration point
-        for (const [lat, h] of [[-2.9, 6.3], [-2.9, 5.0], [stagger + 0.45, 5.05]] as const) insul.push(new THREE.Matrix4().compose(local(s, lat, h), rot, new THREE.Vector3(0.09, 0.09, 0.28)));
-        // cantilever tube (upper) and registration arm (lower)
-        segment(local(s, -3.2, 6.3), local(s, stagger + 0.4, 6.3), 0.07, arms);
-        segment(local(s, -3.2, 5.0), local(s, stagger + 0.6, 5.05), 0.06, arms);
-        segment(local(s, -3.2, 5.0), local(s, -1.2, 6.3), 0.05, arms);
-        segment(local(s, stagger, WIRE_HEIGHT), local(s, stagger + 0.6, 5.05), 0.03, arms);
+        const mast = (lat: number) => {
+          const base = local(s, lat, -0.8);
+          const fl = new THREE.Vector3(0.24, 8.3, 0.02);
+          for (const dz of [-0.13, 0.13]) masts.push(new THREE.Matrix4().compose(base.clone().add(new THREE.Vector3(Math.cos(yaw) * dz, 4.15, -Math.sin(yaw) * dz)), rot, fl));
+          masts.push(new THREE.Matrix4().compose(base.clone().add(new THREE.Vector3(0, 4.15, 0)), rot, new THREE.Vector3(0.02, 8.3, 0.24)));
+          plinths.push(new THREE.Matrix4().compose(base.clone().add(new THREE.Vector3(0, 0.2, 0)), rot, new THREE.Vector3(0.55, 0.5, 0.55)));
+        };
+        mast(-3.3);
+        if (portal) {
+          // portal: second mast beyond the other track, a box girder across, and a drop tube with
+          // a registration arm over each track
+          const far = adj + Math.sign(adj) * 3.3;
+          mast(far);
+          segment(local(s, -3.42, 7.2), local(s, far + Math.sign(far) * 0.12, 7.2), 0.42, masts);
+          for (const [tl, sg] of [[0, stagger], [adj, -stagger]] as const) {
+            const x = tl + sg + 0.35;
+            segment(local(s, x, 7.0), local(s, x, 4.95), 0.07, arms);
+            segment(local(s, tl + sg, WIRE_HEIGHT), local(s, x, 5.05), 0.03, arms);
+            insul.push(new THREE.Matrix4().compose(local(s, x, 6.65), rot, new THREE.Vector3(0.09, 0.28, 0.09)));
+          }
+        } else {
+          // insulators at the mast end of each arm and at the registration point
+          for (const [lat, h] of [[-2.9, 6.3], [-2.9, 5.0], [stagger + 0.45, 5.05]] as const) insul.push(new THREE.Matrix4().compose(local(s, lat, h), rot, new THREE.Vector3(0.09, 0.09, 0.28)));
+          // cantilever tube (upper) and registration arm (lower)
+          segment(local(s, -3.2, 6.3), local(s, stagger + 0.4, 6.3), 0.07, arms);
+          segment(local(s, -3.2, 5.0), local(s, stagger + 0.6, 5.05), 0.06, arms);
+          segment(local(s, -3.2, 5.0), local(s, -1.2, 6.3), 0.05, arms);
+          segment(local(s, stagger, WIRE_HEIGHT), local(s, stagger + 0.6, 5.05), 0.03, arms);
+        }
       }
       void pyNow;
       if (sN > path.length) continue;

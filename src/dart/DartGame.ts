@@ -73,6 +73,8 @@ export class DartGame {
   state: 'ready' | 'driving' | 'finished' | 'failed' = 'ready';
   failReason = '';
   private t = 0;
+  /** 0..1 cloud cover: an Irish overcast sky by default, as on the reference footage. */
+  private get overcast() { return this.opts.weather === 'bright' ? 0.3 : 0.75; }
   /** Rendered frame counter (used by tooling). */
   frames = 0;
   private last = performance.now();
@@ -140,7 +142,7 @@ export class DartGame {
     this.train.doorOpen[this.stops[0].side > 0 ? 'right' : 'left'] = 1;
     this.phys.notch = -7;
     const startDate = this.dateAt(this.clock);
-    this.engine.setTime(startDate, 0.35);
+    this.engine.setTime(startDate, this.overcast);
     this.placeTrain(0);
   }
 
@@ -405,7 +407,7 @@ export class DartGame {
     }
     const camPos = cam.getWorldPosition(new THREE.Vector3());
     // environment
-    this.engine.setTime(this.dateAt(this.clock), 0.35);
+    this.engine.setTime(this.dateAt(this.clock), this.overcast);
     const night = this.engine.night;
     buildingUniforms.uNight.value = night;
     const sm = streetMaterials();

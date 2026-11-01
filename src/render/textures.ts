@@ -168,6 +168,39 @@ export function chainlinkTexture(): THREE.Texture {
   return t;
 }
 
+/** Welded mesh panel fencing (the dark green lineside fence), 2 m wide x 1.9 m tall per repeat. */
+export function weldMeshTexture(): THREE.Texture {
+  const [c, g] = canvas(256, 256);
+  g.clearRect(0, 0, 256, 256);
+  g.fillStyle = '#ffffff';
+  for (let x = 0; x < 256; x += 6.4) g.fillRect(x, 0, 1.6, 256);          // vertical wires every 5 cm
+  for (let y = 4; y < 256; y += 26) g.fillRect(0, y, 256, 2);             // horizontal wires every 20 cm
+  g.fillRect(0, 0, 256, 4); g.fillRect(0, 252, 256, 4);                    // top and bottom rails
+  g.fillRect(0, 0, 7, 256);                                               // panel post
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.anisotropy = 8;
+  return t;
+}
+
+/** Steel palisade (W-section pales with split tops), 2 m per repeat. */
+export function palisadeTexture(): THREE.Texture {
+  const [c, g] = canvas(256, 256);
+  g.clearRect(0, 0, 256, 256);
+  for (let x = 2; x < 256; x += 18) {
+    const grd = g.createLinearGradient(x, 0, x + 12, 0);
+    grd.addColorStop(0, '#9a9a9a'); grd.addColorStop(0.5, '#ffffff'); grd.addColorStop(1, '#8a8a8a');
+    g.fillStyle = grd; g.fillRect(x, 14, 12, 242);
+    g.beginPath(); g.moveTo(x, 14); g.lineTo(x + 3, 0); g.lineTo(x + 6, 10); g.lineTo(x + 9, 0); g.lineTo(x + 12, 14); g.fill();
+  }
+  g.fillStyle = '#b0b0b0'; g.fillRect(0, 40, 256, 7); g.fillRect(0, 210, 256, 7);
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 8;
+  return t;
+}
+
 /** Tactile paving (blister pattern), 0.4 m repeat. */
 export function tactileTexture(): THREE.Texture {
   const [c, g] = canvas(128, 128);

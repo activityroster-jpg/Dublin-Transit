@@ -1,6 +1,6 @@
 // Home screen (choose a mode) and the DART set-up screen.
 import { h } from './dom';
-import { END_NAMES, findServices, fmtTime, servicesNear, type Direction, type End, type RunOptions, type ServiceChoice } from '../dart/services';
+import { END_NAMES, findServices, fmtTime, servicesNear, type Direction, type End, type RunOptions, type ServiceChoice, type Weather } from '../dart/services';
 import type { TimetableData } from '../dart/data';
 import { defaultQuality, type Quality } from '../core/env';
 
@@ -30,7 +30,7 @@ export interface SetupResult { opts: RunOptions; choice: ServiceChoice; quality:
 
 export function dartSetup(tt: TimetableData, onBack: () => void, onStart: (r: SetupResult) => void): HTMLElement {
   const now = new Date();
-  const st = { direction: 'north' as Direction, from: 'bray' as End, to: 'howth' as End, date: now, timeMin: now.getHours() * 60 + now.getMinutes(), traffic: true, quality: defaultQuality(), chosen: null as ServiceChoice | null };
+  const st = { direction: 'north' as Direction, from: 'bray' as End, to: 'howth' as End, date: now, timeMin: now.getHours() * 60 + now.getMinutes(), traffic: true, weather: 'overcast' as Weather, quality: defaultQuality(), chosen: null as ServiceChoice | null };
   const root = h('div', { class: 'screen' });
   const render = () => {
     root.innerHTML = '';
@@ -40,7 +40,7 @@ export function dartSetup(tt: TimetableData, onBack: () => void, onStart: (r: Se
     const toOpts: [End, string][] = st.direction === 'north' ? [['howth', 'Howth'], ['malahide', 'Malahide']] : [['bray', 'Bray'], ['greystones', 'Greystones']];
     if (!fromOpts.some(([v]) => v === st.from)) st.from = fromOpts[1][0];
     if (!toOpts.some(([v]) => v === st.to)) st.to = toOpts[0][0];
-    const opts: RunOptions = { direction: st.direction, from: st.from, to: st.to, date: st.date, timeMin: st.timeMin, traffic: st.traffic };
+    const opts: RunOptions = { direction: st.direction, from: st.from, to: st.to, date: st.date, timeMin: st.timeMin, traffic: st.traffic, weather: st.weather };
     const all = findServices(tt, opts);
     const near = servicesNear(all, st.timeMin, 8);
     if (!st.chosen || !near.includes(st.chosen)) st.chosen = near[0] ?? null;
@@ -65,6 +65,8 @@ export function dartSetup(tt: TimetableData, onBack: () => void, onStart: (r: Se
         near.length ? h('div', { class: 'services' }, ...near.map((c) => h('button', { class: `svc ${c === st.chosen ? 'on' : ''}`, onclick: () => { st.chosen = c; render(); } },
           h('b', {}, fmtTime(c.dep)), h('span', {}, `arr ${fmtTime(c.arr)} · ${c.toIdx - c.fromIdx} stops · ${c.trip.code || c.trip.id.split('_')[1]}`)))) :
           h('p', { class: 'tag' }, 'No services for this combination on this day. Try another day or end point.'),
+        h('div', { class: 'lbl' }, 'Weather'),
+        h('div', { class: 'row' }, seg([['overcast', 'Overcast'], ['bright', 'Sunny spells']] as [Weather, string][], st.weather, (v) => (st.weather = v))),
         h('div', { class: 'lbl' }, 'Other traffic'),
         h('div', { class: 'row' }, seg([['on', 'On: every other DART runs too'], ['off', 'Off: clear line']] as ['on' | 'off', string][], st.traffic ? 'on' : 'off', (v) => (st.traffic = v === 'on'))),
         h('div', { class: 'lbl' }, 'Graphics'),

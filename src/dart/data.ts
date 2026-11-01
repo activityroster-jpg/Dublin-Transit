@@ -72,6 +72,11 @@ export async function loadDart(onProgress: (label: string, f: number) => void, t
   return { network, timetable: tt, terrain, near, far };
 }
 
+/** What is beside each track (see scripts/data/lineside.mjs). Missing file -> null (plain fences). */
+export async function loadLineside(): Promise<import('../render/track').LinesideData | null> {
+  try { const r = await fetch(BASE + 'lineside.json'); return r.ok ? ((await r.json()) as import('../render/track').LinesideData) : null; } catch { return null; }
+}
+
 const sceneryCache = new Map<string, Promise<SceneryTile | null>>();
 export function loadSceneryTile(key: string): Promise<SceneryTile | null> {
   let p = sceneryCache.get(key);

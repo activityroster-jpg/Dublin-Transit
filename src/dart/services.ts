@@ -6,7 +6,8 @@ export type End = 'greystones' | 'bray' | 'howth' | 'malahide';
 export const END_NAMES: Record<End, string> = { greystones: 'Greystones', bray: 'Bray', howth: 'Howth', malahide: 'Malahide' };
 const GTFS_NAME: Record<End, RegExp> = { greystones: /^greystones/i, bray: /^bray/i, howth: /^howth$/i, malahide: /^malahide/i };
 
-export interface RunOptions { direction: Direction; from: End; to: End; date: Date; timeMin: number; traffic: boolean }
+export type Weather = 'overcast' | 'bright';
+export interface RunOptions { direction: Direction; from: End; to: End; date: Date; timeMin: number; traffic: boolean; weather?: Weather }
 
 export function pathIdFor(o: Pick<RunOptions, 'direction' | 'from' | 'to'>): string {
   return o.direction === 'north' ? `greystones-${o.to}` : `${o.from}-greystones`;
