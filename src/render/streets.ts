@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import type { SceneryTile } from '../dart/data';
 import { fenceTexture, tex } from './textures';
+import { instance, loadModel, placement } from './models';
 
 let mats: Record<string, THREE.Material> | null = null;
 export const lampUniforms = { night: 0 };
@@ -15,9 +16,10 @@ export function streetMaterials() {
   const brickwall = new THREE.MeshStandardMaterial({ map: tex('brick_diff', 1), normalMap: tex('brick_nor_gl', 1, false), roughness: 0.95, side: THREE.DoubleSide });
   const hedge = new THREE.MeshStandardMaterial({ color: 0x2f4a22, roughness: 1, map: tex('terrain_forest_diff', 1) });
   const concrete = new THREE.MeshStandardMaterial({ map: tex('concrete_diff', 1), roughness: 0.9, side: THREE.DoubleSide });
+  const kerb = new THREE.MeshStandardMaterial({ color: 0xb9b6ae, roughness: 0.85, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -6 });
   const lampPole = new THREE.MeshStandardMaterial({ color: 0x3b3f42, roughness: 0.5, metalness: 0.6 });
   const lampHead = new THREE.MeshStandardMaterial({ color: 0x222222, emissive: new THREE.Color(1, 0.75, 0.45), emissiveIntensity: 0 });
-  mats = { asphalt, footway, marking, fence, wall, brickwall, hedge, concrete, lampPole, lampHead };
+  mats = { asphalt, footway, marking, fence, wall, brickwall, hedge, concrete, lampPole, lampHead, kerb };
   return mats;
 }
 
@@ -75,16 +77,31 @@ function mesh(pos: number[], uv: number[], idx: number[], mat: THREE.Material, s
 }
 
 const poleGeo = new THREE.CylinderGeometry(0.06, 0.09, 8, 6); poleGeo.translate(0, 4, 0);
-const headGeo = new THREE.BoxGeometry(0.25, 0.12, 0.7); headGeo.translate(0, 8, 0.3);
+const headGeo = new THREE.BoxGeometry(0.3, 0.14, 0.5); headGeo.translate(0, 6.1, 0.35);
 
 export function buildStreets(tile: SceneryTile, origin: THREE.Vector3): THREE.Group {
   const M = streetMaterials();
   const g = new THREE.Group();
   const A = { p: [] as number[], u: [] as number[], i: [] as number[] }, F = { p: [] as number[], u: [] as number[], i: [] as number[] }, K = { p: [] as number[], u: [] as number[], i: [] as number[] };
   const deck = { p: [] as number[], u: [] as number[], i: [] as number[] };
+  const K2 = { p: [] as number[], u: [] as number[], i: [] as number[] };
   for (const [pts, width, kind, bridge] of tile.r) {
     const T = FOOT.has(kind) ? F : A;
     ribbon(pts, width, origin, bridge ? 0.05 : 0, T.p, T.u, T.i);
+    if (!FOOT.has(kind) && kind !== 'service' && kind !== 'track' && !bridge) {
+      // kerbs: a raised pale strip along each edge of the carriageway
+      const n = pts.length / 3;
+      for (const sideK of [-1, 1]) {
+        const edge: number[] = [];
+        for (let i = 0; i < n; i++) {
+          const a = Math.max(0, i - 1), b = Math.min(n - 1, i + 1);
+          let dx = pts[b * 3] - pts[a * 3], dz = pts[b * 3 + 1] - pts[a * 3 + 1]; const L = Math.hypot(dx, dz) || 1; dx /= L; dz /= L;
+          const off = sideK * (width / 2 + 0.12);
+          edge.push(pts[i * 3] + dz * off, pts[i * 3 + 1] - dx * off, pts[i * 3 + 2]);
+        }
+        ribbon(edge, 0.25, origin, 0.1, K2.p, K2.u, K2.i);
+      }
+    }
     if (MAJOR.has(kind) && !bridge) {
       // dashed centre line: short ribbons
       const n = pts.length / 3;
@@ -114,7 +131,7 @@ export function buildStreets(tile: SceneryTile, origin: THREE.Vector3): THREE.Gr
       ribbon(under, width + 1.2, origin, 0, deck.p, deck.u, deck.i);
     }
   }
-  for (const [m, mat] of [[A, M.asphalt], [F, M.footway], [K, M.marking]] as const) { const x = mesh(m.p, m.u, m.i, mat); if (x) g.add(x); }
+  for (const [m, mat] of [[A, M.asphalt], [F, M.footway], [K, M.marking], [K2, M.kerb]] as const) { const x = mesh(m.p, m.u, m.i, mat); if (x) g.add(x); }
   const dm = mesh(deck.p, deck.u, deck.i, M.concrete, true); if (dm) g.add(dm);
 
   const W = { p: [] as number[], u: [] as number[], i: [] as number[] }, Fe = { p: [] as number[], u: [] as number[], i: [] as number[] }, H = { p: [] as number[], u: [] as number[], i: [] as number[] };
@@ -128,15 +145,17 @@ export function buildStreets(tile: SceneryTile, origin: THREE.Vector3): THREE.Gr
   const hm = mesh(H.p, H.u, H.i, M.hedge, true); if (hm) g.add(hm);
 
   if (tile.l.length) {
-    const poles = new THREE.InstancedMesh(poleGeo, M.lampPole, tile.l.length);
+    // real scanned street lamps (loaded async, attached when ready) with an emissive head for night
     const heads = new THREE.InstancedMesh(headGeo, M.lampHead, tile.l.length);
     const m4 = new THREE.Matrix4();
+    const mats: THREE.Matrix4[] = [];
     tile.l.forEach(([x, z, y], i) => {
       m4.makeRotationY((x * 13.7 + z) % 6.28).setPosition(x - origin.x, y - origin.y, z - origin.z);
-      poles.setMatrixAt(i, m4); heads.setMatrixAt(i, m4);
+      heads.setMatrixAt(i, m4);
+      mats.push(placement(x - origin.x, y - origin.y, z - origin.z, (x * 13.7 + z) % 6.28, 1.6));
     });
-    poles.castShadow = true;
-    g.add(poles, heads);
+    g.add(heads);
+    void loadModel('street_lamp_01').then((lamp) => { const li = instance(lamp.parts, mats, true); li.traverse((o) => { o.matrixAutoUpdate = false; o.updateMatrix(); }); g.add(li); });
   }
   return g;
 }

@@ -6,7 +6,7 @@ import { defaultQuality, type Quality } from '../core/env';
 
 const LOGO = `<svg class="logo" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="#0b6b4b"/><path d="M14 40h36M18 46l-4 6M46 46l4 6" stroke="#fff" stroke-width="4" stroke-linecap="round"/><rect x="16" y="12" width="32" height="28" rx="6" fill="#fff"/><rect x="21" y="17" width="22" height="10" rx="2" fill="#0b6b4b"/><circle cx="23" cy="34" r="2.5" fill="#f5c400"/><circle cx="41" cy="34" r="2.5" fill="#f5c400"/></svg>`;
 
-const FOOT = () => h('div', { class: 'foot', html: 'Map data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a> (ODbL) · Timetable: National Transport Authority GTFS (CC BY 4.0) · Elevation: AWS Terrain Tiles · Textures: Poly Haven (CC0).<br>Dublin Transit is an independent simulator and is not affiliated with Iarnród Éireann / Irish Rail or Transport Infrastructure Ireland.' });
+const FOOT = () => h('div', { class: 'foot', html: 'Map data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a> (ODbL) · Timetable: National Transport Authority GTFS (CC BY 4.0) · Contains Irish Public Sector Data (Geological Survey Ireland &amp; Transport Infrastructure Ireland / OPW) licensed under CC BY 4.0 · Textures, skies and models: Poly Haven (CC0).<br>Dublin Transit is an independent simulator and is not affiliated with Iarnród Éireann / Irish Rail or Transport Infrastructure Ireland.' });
 
 export function homeScreen(onDart: () => void): HTMLElement {
   const mode = (title: string, desc: string, colour: string, live: boolean, onClick?: () => void) =>

@@ -30,6 +30,9 @@ TEX = {
     'bark':            ('bark_brown_02', ['diff'], 512),
     'rustmetal':       ('rusty_metal_02', ['diff'], 512),
     'groundnormal':    ('leafy_grass', ['nor_gl'], 1024),
+    'metal':           ('metal_plate', ['diff', 'nor_gl'], 1024),
+    'rubber':          ('rubber_floor_01' if False else 'anti_slip_concrete', ['diff', 'nor_gl'], 512),
+    'paving':          ('brick_pavement_02', ['diff', 'nor_gl'], 1024),
 }
 
 def get(url):

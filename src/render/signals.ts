@@ -8,6 +8,7 @@ const LAMP_COL = { G: new THREE.Color(0.2, 1, 0.55), Y: new THREE.Color(1, 0.7, 
 const dark = new THREE.MeshStandardMaterial({ color: 0x0c0c0c, roughness: 0.6 });
 const post = new THREE.MeshStandardMaterial({ color: 0x9aa0a4, roughness: 0.6, metalness: 0.5 });
 const white = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.6 });
+const cabinet = new THREE.MeshStandardMaterial({ color: 0x6f7d72, roughness: 0.6, metalness: 0.3 });
 const box = new THREE.BoxGeometry(1, 1, 1);
 const lampGeo = new THREE.CircleGeometry(0.1, 16);
 const hoodGeo = new THREE.CylinderGeometry(0.13, 0.13, 0.22, 12, 1, true, 0, Math.PI);
@@ -38,6 +39,11 @@ export class SignalMesh {
       const hood = new THREE.Mesh(hoodGeo, dark); hood.rotation.x = Math.PI / 2; hood.rotation.y = Math.PI; hood.position.set(0, y + 0.02, 0.25); this.group.add(hood);
       this.lamps.push({ mat, col: k === 'G' ? LAMP_COL.G : k === 'R' ? LAMP_COL.R : LAMP_COL.Y, key: k });
     });
+    // location cabinet (relay case) behind the signal
+    if (!repeater) {
+      const cab = new THREE.Mesh(box, cabinet); cab.scale.set(0.9, 1.35, 0.55); cab.position.set(side * 1.3, 0.675, -2.6); cab.castShadow = true; this.group.add(cab);
+      const plinth = new THREE.Mesh(box, dark); plinth.scale.set(1.1, 0.12, 0.75); plinth.position.set(side * 1.3, 0.06, -2.6); this.group.add(plinth);
+    }
     // identification plate
     const plateMat = new THREE.MeshStandardMaterial({ map: textTexture(ref, { w: 256, h: 92, bg: '#ffffff', fg: '#000000' }) });
     plateMat.userData.perItem = true;

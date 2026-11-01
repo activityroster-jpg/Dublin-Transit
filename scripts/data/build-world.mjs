@@ -6,7 +6,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { OUT, RAW, project, unproject, readJson, round } from './lib.mjs';
-import { Dem } from './fetch-dem.mjs';
+import { Dem, LayeredDem } from './fetch-dem.mjs';
 import { SegHash, joinRings, pointInRing, ringBBox, ringArea, mulberry32 } from './geom.mjs';
 
 export const NEAR = { size: 256, n: 65 };   // 4 m grid
@@ -45,15 +45,23 @@ export async function buildWorld() {
       bx0 = Math.min(bx0, ax); bz0 = Math.min(bz0, az); bx1 = Math.max(bx1, ax); bz1 = Math.max(bz1, az);
     }
   }
+  const STEP_LEN = net.paths[0].step;
   const trackInfo = (x, z, r) => {
     const h = track.nearest(x, z, r);
     if (!h) return null;
-    return { d: h.d, y: h.seg.data.ya + (h.seg.data.yb - h.seg.data.ya) * h.t, kind: h.seg.data.kind, side: h.side, seg: h.seg };
+    return { d: h.d, y: h.seg.data.ya + (h.seg.data.yb - h.seg.data.ya) * h.t, kind: h.seg.data.kind, side: h.side, seg: h.seg, s: h.seg.data.s + h.t * STEP_LEN, path: h.seg.data.path };
+  };
+  // station platform zones: the carve keeps a flat shelf under the platform (stations in cuttings)
+  const platformZones = net.paths.flatMap((p) => p.stations.map((st) => ({ path: p.id, s0: st.platform.s0 - 14, s1: st.platform.s1 + 14, w: Math.max(3.5, Math.min(7, st.platform.width || 4)) })));
+  const platformShelf = (ti) => {
+    if (!ti) return 0;
+    for (const z of platformZones) if (z.path === ti.path && ti.s >= z.s0 && ti.s <= z.s1) return 1.65 + z.w + 1.5;
+    return 0;
   };
 
   // ---- DEMs ----
   const [la0, lo0] = unproject(bx0 - 7000, bz1 + 7000), [la1, lo1] = unproject(bx1 + 7000, bz0 - 7000);
-  const demNear = new Dem(14);
+  const demNear = new LayeredDem(16, 14);
   const [nla0, nlo0] = unproject(bx0 - 800, bz1 + 800), [nla1, nlo1] = unproject(bx1 + 800, bz0 - 800);
   await demNear.load(nla0, nlo0, nla1, nlo1);
   const demFar = new Dem(11);
@@ -208,8 +216,9 @@ export async function buildWorld() {
         } else if (ti.kind === 'tunnel') {
           h = Math.max(h, ti.y + 7.5);
         } else {
-          const core = 2.7;
-          if (ti.d < core) { h = form; c = CLS.BALLAST; }
+          const shelf = platformShelf(ti);
+          const core = shelf ? Math.max(2.7, shelf) : 2.7;
+          if (ti.d < core) { h = form; c = shelf && ti.d > 2.7 ? CLS.PAVED : CLS.BALLAST; }
           else {
             const w = Math.max(2.5, Math.abs(h - form) * 1.6);
             if (ti.d < core + w) {
@@ -266,7 +275,7 @@ export async function buildWorld() {
 
   // ---- Scenery ----
   const tiles = new Map();
-  const tileOf = (x, z) => { const k = `${Math.floor(x / SCN)}_${Math.floor(z / SCN)}`; if (!tiles.has(k)) tiles.set(k, { b: [], r: [], t: [], f: [], l: [], w: [] }); return tiles.get(k); };
+  const tileOf = (x, z) => { const k = `${Math.floor(x / SCN)}_${Math.floor(z / SCN)}`; if (!tiles.has(k)) tiles.set(k, { b: [], r: [], t: [], f: [], l: [], w: [], k: [] }); return tiles.get(k); };
   const nearTrack = (x, z, r) => track.nearest(x, z, r);
   const q = (v) => Math.round(v * 10) / 10;
 
@@ -396,6 +405,19 @@ export async function buildWorld() {
       }
     }
   }
+  // Rock armour and rocky shore: scatter scanned rocks on ROCK-class terrain cells near the water.
+  let nk = 0;
+  for (const [ix, iz] of nearList) {
+    const H = heightCache.get(`${ix}_${iz}`); if (!H) continue;
+    const cls = new Uint8Array(nearBuf.buffer, nearBuf.byteOffset + nearList.findIndex(([a, b]) => a === ix && b === iz) * N * N * 3 + N * N * 2, N * N);
+    for (let j = 1; j < N - 1; j += 2) for (let i = 1; i < N - 1; i += 2) {
+      if (cls[j * N + i] !== CLS.ROCK || rnd() > 0.35) continue;
+      const x = ix * NEAR.size + i * cell + (rnd() - 0.5) * cell, z = iz * NEAR.size + j * cell + (rnd() - 0.5) * cell;
+      const ti = trackInfo(x, z, 20); if (ti && ti.d < 4.5) continue;
+      tileOf(x, z).k.push([q(x), q(z), q(heightAt(x, z)), round(0.5 + rnd() * 0.7, 2), round(rnd() * 6.28, 2)]);
+      nk++;
+    }
+  }
   // Dedupe trees (paths overlap) and write tiles
   if (fs.existsSync(path.join(OUT, 'dart', 'scenery'))) fs.rmSync(path.join(OUT, 'dart', 'scenery'), { recursive: true });
   fs.mkdirSync(path.join(OUT, 'dart', 'scenery'), { recursive: true });
@@ -410,7 +432,7 @@ export async function buildWorld() {
   fs.writeFileSync(path.join(OUT, 'dart', 'terrain.json'), JSON.stringify({
     near: { size: NEAR.size, n: NEAR.n, tiles: nearList }, far: { size: FAR.size, n: FAR.n, tiles: farList }, scenery: { size: SCN, tiles: [...tiles.keys()] }, classes: CLS,
   }));
-  console.log(`scenery: ${tiles.size} tiles, ${nb} buildings, ${nr} roads, ${nf} barriers, ${nt} trees, ${nv} lineside plants, ${(total / 1e6).toFixed(1)} MB`);
+  console.log(`scenery: ${tiles.size} tiles, ${nb} buildings, ${nr} roads, ${nf} barriers, ${nt} trees, ${nv} lineside plants, ${nk} rocks, ${(total / 1e6).toFixed(1)} MB`);
   console.log(`terrain: near ${(nearBuf.length / 1e6).toFixed(1)} MB, far ${(farBuf.length / 1e6).toFixed(1)} MB`);
 }
 

@@ -31,6 +31,8 @@ export interface SceneryTile {
   t: [number, number, number, number][];
   f: [number[], string, number | null][];
   l: [number, number, number][];
+  /** rocks: x, z, y, scale, yaw */
+  k?: [number, number, number, number, number][];
 }
 
 async function getJson<T>(name: string): Promise<T> {

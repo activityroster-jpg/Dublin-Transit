@@ -11,7 +11,8 @@ A browser-based driving simulator for Dublin public transport, starting with the
 ```bash
 npm install
 npm run dev        # local game at http://localhost:5173
-npm run data       # rebuild public/data from OpenStreetMap, NTA GTFS and terrain tiles
+npm run data:lidar # fetch open Irish LiDAR and bake 2 m elevation tiles (python3, numpy, pyproj, tifffile, pillow)
+npm run data       # rebuild public/data from OpenStreetMap, NTA GTFS, LiDAR and terrain tiles
 npm run build      # production build into dist/
 ```
 
@@ -19,5 +20,5 @@ npm run build      # production build into dist/
 
 - Map data © OpenStreetMap contributors, ODbL. <https://www.openstreetmap.org/copyright>
 - Timetable: National Transport Authority GTFS (Irish Rail), CC BY 4.0.
-- Elevation: AWS Terrain Tiles (Mapzen/Tilezen, sources SRTM, GMTED, ETOPO1).
+- Elevation: Contains Irish Public Sector Data (Geological Survey Ireland & Transport Infrastructure Ireland / Office of Public Works) licensed under a Creative Commons Attribution 4.0 International (CC BY 4.0) licence; AWS Terrain Tiles (SRTM/GMTED) elsewhere.
 - Textures and sky HDRIs: [Poly Haven](https://polyhaven.com) (CC0). See `public/assets/textures/CREDITS.md` and `public/assets/sky/skies.json`.

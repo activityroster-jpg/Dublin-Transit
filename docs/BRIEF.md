@@ -104,6 +104,12 @@ All of this is downloaded and processed by scripts in `scripts/data/`. They can 
 - **Secrets needed**: `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` as GitHub repository
   secrets (see `docs/SETUP.md`).
 
+## How to get past the code-only ceiling
+
+See [`docs/REALISM-OPTIONS.md`](REALISM-OPTIONS.md): every route (filmed capture → Gaussian splats,
+photogrammetry, commissioned train/cab, scanned asset libraries, 1 m LiDAR, Google 3D tiles,
+rendering upgrades, engine alternatives) with cost, licence and risk, and a sequenced recommendation.
+
 ## Phases
 
 | Phase | What's in it | Status |

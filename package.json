@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "data": "node scripts/data/build-all.mjs",
+    "data:lidar": "python3 scripts/data/lidar-to-tiles.py --fetch --src /tmp/lidar",
     "deploy": "npm run build && wrangler deploy"
   },
   "dependencies": {

@@ -12,6 +12,25 @@ import type { QualitySettings } from '../core/env';
 import { sunPosition } from '../core/sun';
 import { clamp, smoothstep } from '../core/rand';
 
+// Height-aware exponential fog for every material: denser near the ground, thinning with altitude.
+THREE.ShaderChunk.fog_pars_fragment = THREE.ShaderChunk.fog_pars_fragment.replace(
+  '#ifdef USE_FOG',
+  '#ifdef USE_FOG\n  varying vec3 vFogWorldPos;',
+);
+THREE.ShaderChunk.fog_pars_vertex = THREE.ShaderChunk.fog_pars_vertex.replace(
+  '#ifdef USE_FOG',
+  '#ifdef USE_FOG\n  varying vec3 vFogWorldPos;',
+);
+THREE.ShaderChunk.fog_vertex = THREE.ShaderChunk.fog_vertex.replace(
+  '#ifdef USE_FOG',
+  '#ifdef USE_FOG\n  vFogWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;',
+);
+THREE.ShaderChunk.fog_fragment = THREE.ShaderChunk.fog_fragment.replace(
+  'float fogFactor = 1.0 - exp( - fogDensity * fogDensity * vFogDepth * vFogDepth );',
+  `float hFall = exp(-max(0.0, (vFogWorldPos.y + cameraPosition.y) * 0.5 - 2.0) * 0.012);
+   float fogFactor = 1.0 - exp( - fogDensity * fogDensity * vFogDepth * vFogDepth * (0.55 + 0.9 * hFall) );`,
+);
+
 interface SkyDef { id: string; kind: string; sunAz: number; sunEl: number; sunStrength: number; upperMean: number; exposure: number }
 interface LoadedSky { def: SkyDef; bg: THREE.Texture; env: THREE.Texture; horizon: THREE.Color }
 const SKY_BASE = `${import.meta.env.BASE_URL}assets/sky/`;

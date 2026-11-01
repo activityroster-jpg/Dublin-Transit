@@ -7,11 +7,15 @@ The brief is `docs/BRIEF.md`; set-up steps for Conor are `docs/SETUP.md`.
 ## Non-negotiables
 
 1. **Real data only.** Track geometry, stations, platform sides, speed limits, structures and
-   signals come from OpenStreetMap; the timetable from the NTA GTFS feed; heights from terrain
-   tiles. Never hand-type coordinates, distances or times. If data is missing, generate it
+   signals come from OpenStreetMap; the timetable from the NTA GTFS feed; heights from open
+   Irish LiDAR (GSI/TII/OPW, 2 m, CC BY 4.0, via `scripts/data/lidar-to-tiles.py`) with AWS
+   terrain tiles as the fallback. Never hand-type coordinates, distances or times. If data is missing, generate it
    deterministically and **flag it** (`src: 'gen'`, `guessed: true`) so it can be replaced.
 2. **Licences.** OSM is ODbL (attribution on screen, in the README and in `docs/BRIEF.md`).
-   GTFS is CC BY 4.0. Textures are CC0 from Poly Haven (`public/assets/textures/CREDITS.md`).
+   GTFS is CC BY 4.0. LiDAR requires the statement "Contains Irish Public Sector Data
+   (Geological Survey Ireland & Transport Infrastructure Ireland / Office of Public Works)
+   licensed under CC BY 4.0". Textures, sky HDRIs and scanned models are CC0 from Poly Haven
+   (`public/assets/*/CREDITS.md`, `public/assets/sky/skies.json`).
    **Never** derive content from Google Maps / Street View imagery.
 3. **No accounts, no personal data, no third-party scripts** until a feature needs them, and
    then only after a decision from Conor. The game runs fully client-side.

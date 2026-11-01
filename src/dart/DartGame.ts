@@ -430,6 +430,7 @@ export class DartGame {
         kmh: P.kmh, limitKmh: this.path.speedLimit(P.s), nextLimitKmh: nl && nl.s - P.s < 1500 ? nl.kmh : null, notch: P.notch, aspect: this.sig.cabAspect, warning: this.sig.warning,
         interlock: this.train.doorOpen.left === 0 && this.train.doorOpen.right === 0, doorsLeft: this.train.doorOpen.left, doorsRight: this.train.doorOpen.right,
         headlights: this.headlights, pantograph: this.pantograph, ebActive: P.forcedBrake > 0 || P.notch === NOTCH_MIN, ataTarget: null,
+        bcBar: (P.brakeDecel / P.spec.ebDecel) * 4.6, mrBar: 8.6 + Math.sin(this.t * 0.3) * 0.25 - P.brakeDecel * 0.3,
         screen: {
           clock: fmtTime(this.clock, true), next: ns ? ns.name : 'Terminus', nextArr: ns ? fmtTime(ns.arr) : '--:--', dist: ns ? `${Math.max(0, Math.round(ns.s - P.s))} m` : '',
           delta: ns ? this.lateness() : '',

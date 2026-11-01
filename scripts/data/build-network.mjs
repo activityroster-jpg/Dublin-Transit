@@ -6,7 +6,7 @@ import path from 'node:path';
 import { RAW, parseMaxspeed, project, round, writeJson, readJson } from './lib.mjs';
 import { fetchRoutes, DART_RELATIONS } from './fetch-osm-routes.mjs';
 import { assembleRelation } from './assemble.mjs';
-import { Dem } from './fetch-dem.mjs';
+import { Dem, LayeredDem } from './fetch-dem.mjs';
 
 export const STEP = 5; // metres between samples in the output
 
@@ -96,7 +96,7 @@ export async function buildNetwork() {
   const routes = await fetchRoutes();
   const timetable = readJson('dart/timetable.json');
   const corridor = loadCorridorElements();
-  const dem = new Dem(14);
+  const dem = new LayeredDem(16, 14);
   const paths = [];
 
   // Pass 1: geometry of all four paths.

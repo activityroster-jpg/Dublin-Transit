@@ -125,13 +125,72 @@ export function textTexture(text: string, opts: { w?: number; h?: number; bg?: s
 export function fenceTexture(): THREE.Texture {
   const [c, g] = canvas(128, 128);
   g.clearRect(0, 0, 128, 128);
-  g.fillStyle = '#1f3a2a';
-  for (let x = 4; x < 128; x += 16) { g.fillRect(x, 6, 7, 122); g.beginPath(); g.moveTo(x - 1, 8); g.lineTo(x + 3.5, 0); g.lineTo(x + 8, 8); g.fill(); }
-  g.fillRect(0, 22, 128, 6); g.fillRect(0, 100, 128, 6);
+  g.fillStyle = '#224a33';
+  for (let x = 3; x < 128; x += 12) { g.fillRect(x, 6, 4.5, 122); g.beginPath(); g.moveTo(x - 1.5, 8); g.lineTo(x + 2.2, 0); g.lineTo(x + 6, 8); g.fill(); }
+  g.fillRect(0, 22, 128, 5); g.fillRect(0, 100, 128, 5);
   const t = new THREE.CanvasTexture(c);
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
   t.colorSpace = THREE.SRGBColorSpace;
   return t;
+}
+
+/** Chain-link mesh (alpha), 2 m repeat. */
+export function chainlinkTexture(): THREE.Texture {
+  const [c, g] = canvas(256, 256);
+  g.clearRect(0, 0, 256, 256);
+  g.strokeStyle = '#8a8f8c'; g.lineWidth = 2.2;
+  const cell = 32;
+  for (let y = -cell; y < 256 + cell; y += cell) for (let x = -cell; x < 256 + cell; x += cell) {
+    g.beginPath(); g.moveTo(x, y + cell / 2); g.lineTo(x + cell / 2, y); g.lineTo(x + cell, y + cell / 2); g.lineTo(x + cell / 2, y + cell); g.closePath(); g.stroke();
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 8;
+  return t;
+}
+
+/** Tactile paving (blister pattern), 0.4 m repeat. */
+export function tactileTexture(): THREE.Texture {
+  const [c, g] = canvas(128, 128);
+  g.fillStyle = '#c9c0a8'; g.fillRect(0, 0, 128, 128);
+  for (let y = 10; y < 128; y += 21) for (let x = 10; x < 128; x += 21) {
+    const r = g.createRadialGradient(x - 2, y - 2, 1, x, y, 7);
+    r.addColorStop(0, '#e0d8c2'); r.addColorStop(1, '#a89f86');
+    g.fillStyle = r; g.beginPath(); g.arc(x, y, 7, 0, Math.PI * 2); g.fill();
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
+/** Customer information screen: next trains. */
+export function cisTexture(lines: string[]): THREE.CanvasTexture {
+  const [c, g] = canvas(512, 160);
+  g.fillStyle = '#0a0a0a'; g.fillRect(0, 0, 512, 160);
+  g.fillStyle = '#ffb21a'; g.font = 'bold 30px "Courier New", monospace'; g.textBaseline = 'middle';
+  lines.slice(0, 4).forEach((l, i) => g.fillText(l, 14, 24 + i * 36));
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
+/** Round pressure gauge face (bar). */
+export function gaugeTexture(label: string, max: number, redFrom: number): HTMLCanvasElement {
+  const [c, g] = canvas(256, 256);
+  g.fillStyle = '#f2efe6'; g.beginPath(); g.arc(128, 128, 124, 0, Math.PI * 2); g.fill();
+  const a0 = Math.PI * 0.75, a1 = Math.PI * 2.25;
+  const ang = (v: number) => a0 + (a1 - a0) * (v / max);
+  g.strokeStyle = '#c0392b'; g.lineWidth = 8; g.beginPath(); g.arc(128, 128, 108, ang(redFrom), a1); g.stroke();
+  g.strokeStyle = '#222'; g.fillStyle = '#222'; g.lineWidth = 2; g.font = 'bold 18px Arial'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  for (let v = 0; v <= max; v += 1) {
+    const a = ang(v);
+    g.beginPath(); g.moveTo(128 + Math.cos(a) * 112, 128 + Math.sin(a) * 112); g.lineTo(128 + Math.cos(a) * 98, 128 + Math.sin(a) * 98); g.stroke();
+    g.fillText(String(v), 128 + Math.cos(a) * 82, 128 + Math.sin(a) * 82);
+  }
+  g.font = 'bold 14px Arial'; g.fillText(label, 128, 172); g.fillText('bar', 128, 190);
+  return c;
 }
 
 /** Dark-orange LED destination display. */

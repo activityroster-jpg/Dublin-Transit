@@ -7,6 +7,7 @@ import * as THREE from 'three';
 import { CAR_LEN } from './model';
 import type { Aspect } from '../render/signals';
 import { NOTCH_MAX, NOTCH_MIN, notchLabel } from './physics';
+import { gaugeTexture, tex } from '../render/textures';
 
 const ZF = CAR_LEN / 2; // cab front (local z)
 const W = (sx: number) => -sx;
@@ -19,6 +20,7 @@ const box = new THREE.BoxGeometry(1, 1, 1);
 export interface CabState {
   kmh: number; limitKmh: number; nextLimitKmh: number | null; notch: number; aspect: Aspect; warning: boolean; interlock: boolean;
   doorsLeft: number; doorsRight: number; headlights: boolean; pantograph: boolean; ebActive: boolean; ataTarget: number | null;
+  bcBar: number; mrBar: number;
   screen: { clock: string; next: string; nextArr: string; dist: string; delta: string; msg: string };
 }
 
@@ -35,14 +37,18 @@ export class Cab {
   private lastScreen = '';
   readonly light: THREE.PointLight;
   private wiper: THREE.Mesh;
+  private bcGauge!: { needle: THREE.Mesh; max: number };
+  private mrGauge!: { needle: THREE.Mesh; max: number };
+  private ceilingLight!: THREE.MeshStandardMaterial;
   wiperOn = false;
   private wiperT = 0;
 
   constructor() {
     const g = this.group;
-    const shell = mat(0xb9bdbd, 0.7);
+    const shell = mat(0xd9d6cc, 0.75);
     const darkPanel = mat(0x3c4144, 0.55, 0.2);
-    const desk = mat(0x5a6064, 0.5, 0.2);
+    const desk = new THREE.MeshStandardMaterial({ color: 0x6a7074, roughness: 0.45, metalness: 0.5, map: tex('metal_diff', 1), normalMap: tex('metal_nor_gl', 1, false), normalScale: new THREE.Vector2(0.5, 0.5) });
+    const deskTop = new THREE.MeshStandardMaterial({ color: 0x2f3437, roughness: 0.75, metalness: 0.1, normalMap: tex('rubber_nor_gl', 1, false), normalScale: new THREE.Vector2(0.4, 0.4) });
     const floor = mat(0x2a2a2a, 0.9);
     const glass = new THREE.MeshPhysicalMaterial({ color: 0xffffff, roughness: 0.02, metalness: 0, transmission: 0, transparent: true, opacity: 0.08, side: THREE.DoubleSide, depthWrite: false });
     /** Box at screen-x sx. */
@@ -68,7 +74,7 @@ export class Cab {
     // sun visor above the driver
     const visor = P(new THREE.MeshStandardMaterial({ color: 0x223022, transparent: true, opacity: 0.55, roughness: 0.3 }), 1.0, 0.01, 0.35, DRIVER_SX, 3.2, ZF - 0.3, false); visor.rotation.x = 0.35;
     // desk: flat top at the hands, then the instrument panel angled up to the windscreen sill
-    P(desk, 2.7, 0.05, 0.6, 0, 1.98, ZF - 0.75);
+    P(deskTop, 2.7, 0.05, 0.6, 0, 1.98, ZF - 0.75);
     P(darkPanel, 2.7, 0.88, 0.05, 0, 1.54, ZF - 1.05);
     // wedge under the angled panel: profile in (z, y), extruded across the cab
     const wedge = new THREE.Shape();
@@ -97,52 +103,76 @@ export class Cab {
     const speedo = new THREE.Mesh(new THREE.CircleGeometry(0.11, 40), new THREE.MeshStandardMaterial({ map: this.speedoTex, emissive: 0xffffff, emissiveMap: this.speedoTex, emissiveIntensity: 0.35, roughness: 0.3 }));
     speedo.position.set(DRIVER_SX, 0.02, 0.004); panel.add(speedo);
     const bezel = new THREE.Mesh(new THREE.RingGeometry(0.11, 0.125, 40), mat(0x111111, 0.4, 0.5)); bezel.position.set(DRIVER_SX, 0.02, 0.005); panel.add(bezel);
+    const sqPlate = new THREE.Mesh(new THREE.PlaneGeometry(0.27, 0.27), mat(0x24282b, 0.6, 0.2)); sqPlate.position.set(DRIVER_SX, 0.02, 0.002); panel.add(sqPlate);
+    // brake gauges: brake cylinder and main reservoir, right of the speedo
+    const gauge = (label: string, max: number, red: number, x: number, r: number) => {
+      const cv = gaugeTexture(label, max, red);
+      const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace;
+      const face = new THREE.Mesh(new THREE.CircleGeometry(r, 36), new THREE.MeshStandardMaterial({ map: t, roughness: 0.35 }));
+      face.position.set(x, 0.02, 0.004); panel.add(face);
+      const bz = new THREE.Mesh(new THREE.RingGeometry(r, r + 0.012, 36), mat(0x111111, 0.4, 0.5)); bz.position.set(x, 0.02, 0.005); panel.add(bz);
+      const needle = new THREE.Mesh(new THREE.BoxGeometry(0.006, r * 0.85, 0.003).translate(0, r * 0.35, 0), mat(0xd43a2a, 0.5));
+      needle.position.set(x, 0.02, 0.008); panel.add(needle);
+      return { needle, max };
+    };
+    this.bcGauge = gauge('BRAKE CYL', 6, 4.5, DRIVER_SX + 0.21, 0.065);
+    this.mrGauge = gauge('MAIN RES', 10, 9, DRIVER_SX + 0.36, 0.065);
     // CAWS aspect display (4 lamps, top to bottom: YY, G, Y, R) to the left of the speedo
     const cawsX = DRIVER_SX - 0.3;
-    const cawsBox = new THREE.Mesh(new THREE.PlaneGeometry(0.075, 0.26), mat(0x0a0a0a)); cawsBox.position.set(cawsX, 0.03, 0.002); panel.add(cawsBox);
+    const cawsBox = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.3, 0.04), mat(0x1a1c1e, 0.5, 0.3)); cawsBox.position.set(cawsX, 0.03, 0.02); panel.add(cawsBox);
+    const cawsFace = new THREE.Mesh(new THREE.PlaneGeometry(0.075, 0.26), mat(0x050505)); cawsFace.position.set(cawsX, 0.03, 0.041); panel.add(cawsFace);
     const lampDefs: [string, number, number][] = [['Y2', 0x332200, 0.12], ['G', 0x003311, 0.06], ['Y', 0x332200, 0.0], ['R', 0x330000, -0.06]];
     const lampCols: Record<string, number> = { Y2: 0xffb000, G: 0x22ff77, Y: 0xffb000, R: 0xff2200 };
     for (const [k, c, y] of lampDefs) {
       const m = new THREE.MeshStandardMaterial({ color: c, emissive: new THREE.Color(lampCols[k]), emissiveIntensity: 0 });
       this.lamps['caws' + k] = m;
-      const l = new THREE.Mesh(new THREE.CircleGeometry(0.02, 20), m); l.position.set(cawsX, y, 0.004); panel.add(l);
+      const l = new THREE.Mesh(new THREE.CircleGeometry(0.02, 20), m); l.position.set(cawsX, y, 0.042); panel.add(l);
     }
-    const ct = labelMesh('CAWS', 0.08); ct.position.set(cawsX, -0.11, 0.004); panel.add(ct);
+    const ct = labelMesh('CAWS', 0.08); ct.position.set(cawsX, -0.115, 0.042); panel.add(ct);
     // train management screen to the right of the speedo
     this.screenCanvas.width = 512; this.screenCanvas.height = 300;
     this.screenTex = new THREE.CanvasTexture(this.screenCanvas); this.screenTex.colorSpace = THREE.SRGBColorSpace;
     const scr = new THREE.Mesh(new THREE.PlaneGeometry(0.34, 0.2), new THREE.MeshStandardMaterial({ map: this.screenTex, emissive: 0xffffff, emissiveMap: this.screenTex, emissiveIntensity: 0.6, roughness: 0.2 }));
-    scr.position.set(DRIVER_SX + 0.42, 0.02, 0.004); panel.add(scr);
-    const scrFrame = new THREE.Mesh(new THREE.PlaneGeometry(0.37, 0.23), mat(0x101214)); scrFrame.position.set(DRIVER_SX + 0.42, 0.02, 0.003); panel.add(scrFrame);
-    // indicator lamps and buttons along the right half of the panel
+    scr.position.set(DRIVER_SX + 0.66, 0.02, 0.004); panel.add(scr);
+    const scrFrame = new THREE.Mesh(new THREE.PlaneGeometry(0.37, 0.23), mat(0x101214)); scrFrame.position.set(DRIVER_SX + 0.66, 0.02, 0.003); panel.add(scrFrame);
+    // indicator lamps (top row) and two rows of labelled push buttons with coloured caps, as on
+    // Irish Rail stock: door test/release/interlock, demister, cab heater, fan, pantograph, lamp
+    // test, reset. Buttons with an action are clickable; the rest are dressing.
     const indicator = (key: string, col: number, x: number, y: number, label: string) => {
       const m = new THREE.MeshStandardMaterial({ color: 0x111111, emissive: new THREE.Color(col), emissiveIntensity: 0 });
       this.lamps[key] = m;
+      const bez = new THREE.Mesh(new THREE.RingGeometry(0.014, 0.019, 16), mat(0x0a0a0a, 0.5, 0.6)); bez.position.set(x, y, 0.004); panel.add(bez);
       const l = new THREE.Mesh(new THREE.CircleGeometry(0.014, 16), m); l.position.set(x, y, 0.004); panel.add(l);
       const t = labelMesh(label, 0.09); t.position.set(x, y - 0.03, 0.004); panel.add(t);
     };
-    indicator('interlock', 0x22ff55, 0.2, 0.14, 'DOORS CLOSED');
-    indicator('doorsL', 0xffaa00, 0.1, 0.05, 'L OPEN');
-    indicator('doorsR', 0xffaa00, 0.3, 0.05, 'R OPEN');
-    indicator('pan', 0x44aaff, 0.5, 0.14, 'PAN UP');
-    indicator('eb', 0xff2200, 0.7, 0.14, 'EMERG BRAKE');
-    indicator('head', 0xffffff, 0.9, 0.14, 'HEADLIGHTS');
-    const button = (action: string, col: number, x: number, y: number, r: number, label: string) => {
-      const m = new THREE.MeshStandardMaterial({ color: col, roughness: 0.4, emissive: new THREE.Color(col), emissiveIntensity: 0.05 });
+    indicator('interlock', 0x22ff55, 0.45, 0.15, 'DOORS CLOSED');
+    indicator('doorsL', 0xffaa00, 0.33, 0.15, 'L OPEN');
+    indicator('doorsR', 0xffaa00, 0.57, 0.15, 'R OPEN');
+    indicator('pan', 0x44aaff, 0.72, 0.15, 'PAN UP');
+    indicator('eb', 0xff2200, 0.87, 0.15, 'EMERG BRAKE');
+    indicator('head', 0xffffff, 1.02, 0.15, 'HEADLIGHTS');
+    const button = (action: string | null, col: number, x: number, y: number, r: number, label: string) => {
+      const m = new THREE.MeshStandardMaterial({ color: col, roughness: 0.35, emissive: new THREE.Color(col), emissiveIntensity: 0.06 });
+      const collar = new THREE.Mesh(new THREE.CylinderGeometry(r + 0.008, r + 0.008, 0.012, 20), mat(0x15181a, 0.5, 0.5));
+      collar.rotation.x = Math.PI / 2; collar.position.set(x, y, 0.006); panel.add(collar);
       const b = new THREE.Mesh(new THREE.CylinderGeometry(r, r, 0.02, 20), m);
-      b.rotation.x = Math.PI / 2; b.position.set(x, y, 0.012);
-      b.userData.action = action; b.userData.label = label;
-      panel.add(b); this.clickables.push(b);
-      const t = labelMesh(label, 0.09); t.position.set(x, y - r - 0.02, 0.004); panel.add(t);
+      b.rotation.x = Math.PI / 2; b.position.set(x, y, 0.016);
+      if (action) { b.userData.action = action; this.clickables.push(b); }
+      b.userData.label = label;
+      panel.add(b);
+      const plate = new THREE.Mesh(new THREE.PlaneGeometry(0.085, 0.022), mat(0xe9e6dc, 0.6)); plate.position.set(x, y - r - 0.018, 0.003); panel.add(plate);
+      const t = labelMesh(label, 0.082); t.position.set(x, y - r - 0.018, 0.004); (t.material as THREE.MeshBasicMaterial).color.setHex(0x111111); panel.add(t);
       return b;
     };
+    const row1: [string | null, number, string][] = [['openL', 0x2e8b57, 'L DOOR REL'], ['closeL', 0xb03030, 'L DOOR CLOSE'], ['openR', 0x2e8b57, 'R DOOR REL'], ['closeR', 0xb03030, 'R DOOR CLOSE'], [null, 0xf2f2f2, 'DOOR TEST'], [null, 0xf2f2f2, 'DEMISTER']];
+    const row2: [string | null, number, string][] = [['horn', 0x333333, 'HORN'], ['lights', 0xf2f2f2, 'HEAD LIGHTS'], ['wiper', 0x2255aa, 'WIPER'], ['panUp', 0x2255aa, 'PAN UP'], ['panDown', 0x1a2a44, 'PAN DOWN'], [null, 0xf5c400, 'LAMP TEST']];
+    row1.forEach(([a, c, l], i) => button(a, c, 0.3 + i * 0.1, 0.05, 0.016, l));
+    row2.forEach(([a, c, l], i) => button(a, c, 0.3 + i * 0.1, -0.05, 0.016, l));
     button('ack', 0xf5c400, DRIVER_SX - 0.3, -0.09, 0.03, 'CAWS ACK');
-    button('horn', 0x333333, DRIVER_SX + 0.16, -0.1, 0.022, 'HORN');
-    button('eb', 0xcc1100, 0.5, -0.06, 0.035, 'EMERGENCY');
-    button('panUp', 0x2255aa, 0.68, -0.04, 0.016, 'PAN ↑');
-    button('panDown', 0x223355, 0.78, -0.04, 0.016, 'PAN ↓');
-    button('lights', 0xdddddd, 0.9, -0.04, 0.016, 'LIGHTS');
-    button('wiper', 0x555555, 1.0, -0.04, 0.016, 'WIPER');
+    // big red emergency mushroom on a yellow collar
+    const mush = button('eb', 0xcc1100, 0.98, -0.07, 0.04, 'EMERGENCY');
+    mush.scale.z = 2.2;
+    const ring = new THREE.Mesh(new THREE.RingGeometry(0.045, 0.06, 24), mat(0xf5c400, 0.6)); ring.position.set(0.98, -0.07, 0.004); panel.add(ring);
     // door controls on each side wall by the driver (left wall for the left doors, right wall for the right)
     const doorPanel = (sx: number) => {
       const dp = new THREE.Group();
@@ -173,6 +203,23 @@ export class Cab {
     this.clickables.push(knob, shaft);
     const nl = labelMesh('POWER ↑  ·  BRAKE ↓', 0.24); nl.position.set(W(DRIVER_SX - 0.42), 2.01, ZF - 0.55); nl.rotation.set(-Math.PI / 2, 0, Math.PI); g.add(nl);
 
+    // driver's key switch on the desk, right of the controller
+    const keyBase = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.035, 0.03, 20), mat(0x222426, 0.4, 0.6)); keyBase.position.set(W(DRIVER_SX - 0.12), 2.02, ZF - 0.78); g.add(keyBase);
+    const key = P(mat(0xc9b037, 0.3, 0.8), 0.01, 0.07, 0.03, DRIVER_SX - 0.12, 2.07, ZF - 0.78); key.rotation.z = 0.5;
+    // radio handset cradled on the left wall by the driver
+    const cradle = P(mat(0x1d1f21, 0.5, 0.3), 0.06, 0.22, 0.09, -1.33, 2.45, ZF - 1.55);
+    void cradle;
+    const handset = P(mat(0x2a2d30, 0.45, 0.2), 0.05, 0.2, 0.06, -1.3, 2.47, ZF - 1.55); handset.rotation.z = 0.08;
+    const cord = new THREE.Mesh(new THREE.TorusGeometry(0.06, 0.006, 6, 24, Math.PI), mat(0x111111, 0.6)); cord.position.set(W(-1.3), 2.3, ZF - 1.55); cord.rotation.y = Math.PI / 2; g.add(cord);
+    // headrest, grab rail, ceiling light panel and the door back to the saloon
+    P(mat(0x23272a, 0.9), 0.4, 0.22, 0.12, DRIVER_SX, 2.55, EYE.z - 0.5);
+    const rail = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 1.0, 10), mat(0xd9dcdd, 0.3, 0.8)); rail.rotation.z = Math.PI / 2; rail.position.set(0.3, 3.25, ZF - 0.14); g.add(rail);
+    this.ceilingLight = new THREE.MeshStandardMaterial({ color: 0xf2f2f2, emissive: new THREE.Color(1, 0.95, 0.85), emissiveIntensity: 0 });
+    P(this.ceilingLight, 0.9, 0.02, 0.25, 0, 3.52, ZF - 1.2, false);
+    P(mat(0x8f9496, 0.6), 0.8, 2.0, 0.04, 0.55, 2.1, ZF - 2.37);
+    P(mat(0x1a2328, 0.05, 0.2), 0.5, 0.5, 0.02, 0.55, 2.7, ZF - 2.35, false);
+    P(mat(0xd9dcdd, 0.3, 0.8), 0.03, 0.25, 0.04, 0.9, 2.1, ZF - 2.34);
+
     this.light = new THREE.PointLight(0xffe2b8, 0, 4, 1.5);
     this.light.position.set(0, 3.4, ZF - 1.2);
     g.add(this.light);
@@ -193,6 +240,10 @@ export class Cab {
     const sc = JSON.stringify(st.screen);
     if (sc !== this.lastScreen) { this.lastScreen = sc; this.drawScreen(st); }
     this.light.intensity = night * 0.6;
+    this.ceilingLight.emissiveIntensity = night * 1.5;
+    const ga = (v: number, max: number) => -(Math.PI * 0.75 + (Math.PI * 1.5 * Math.min(1, v / max)) - Math.PI * 1.5);
+    this.bcGauge.needle.rotation.z += (ga(st.bcBar, this.bcGauge.max) - this.bcGauge.needle.rotation.z) * Math.min(1, dt * 6);
+    this.mrGauge.needle.rotation.z += (ga(st.mrBar, this.mrGauge.max) - this.mrGauge.needle.rotation.z) * Math.min(1, dt * 6);
     if (this.wiperOn || this.wiperT > 0) {
       this.wiperT += dt * 1.6;
       this.wiper.rotation.z = Math.sin(this.wiperT * Math.PI) * 1.1;

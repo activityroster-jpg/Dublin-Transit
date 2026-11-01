@@ -20,6 +20,12 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install numpy pyproj tifffile pillow
+      - name: Open Irish LiDAR (GSI / TII / OPW, CC BY 4.0) -> elevation tiles
+        run: python3 scripts/data/lidar-to-tiles.py --fetch --src /tmp/lidar
       - run: npm run data
       - uses: peter-evans/create-pull-request@v7
         with:

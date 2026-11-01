@@ -22,3 +22,6 @@ All textures are CC0 (public domain) from Poly Haven.
 - `bark`: Poly Haven "bark_brown_02" (CC0) https://polyhaven.com/a/bark_brown_02
 - `rustmetal`: Poly Haven "rusty_metal_02" (CC0) https://polyhaven.com/a/rusty_metal_02
 - `groundnormal`: Poly Haven "leafy_grass" (CC0) https://polyhaven.com/a/leafy_grass
+- `metal`: Poly Haven "metal_plate" (CC0) https://polyhaven.com/a/metal_plate
+- `rubber`: Poly Haven "anti_slip_concrete" (CC0) https://polyhaven.com/a/anti_slip_concrete
+- `paving`: Poly Haven "brick_pavement_02" (CC0) https://polyhaven.com/a/brick_pavement_02
